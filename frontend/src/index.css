@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slateBlue-100 text-slateBlue-800 antialiased font-sans;
+    font-size: clamp(0.75rem, 0.65rem + 0.5vw, 1rem); 
+  }
+}
+
+@layer components {
+  .super-ellipse-card {
+    @apply bg-white rounded-super transition-all duration-300 ease-in-out shadow-sm hover:shadow-deep border border-gray-100;
+  }
+
+  .glass-header {
+    @apply bg-white/70 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-40;
+  }
+}
+
+/* Custom scrollbar for data grid */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s infinite ease-in-out;
+}
