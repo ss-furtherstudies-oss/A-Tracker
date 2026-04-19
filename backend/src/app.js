@@ -23,7 +23,6 @@ app.use('/api/students', require('./routes/students'));
 app.use('/api/applications', require('./routes/applications'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/upload', require('./routes/upload'));
-app.use('/api/dummy', require('./routes/dummy'));
 
 // Error handling middleware
 const errorHandler = require('./middleware/errorHandler');
