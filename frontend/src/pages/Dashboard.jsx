@@ -323,6 +323,8 @@ AcademicStackChart.displayName = 'AcademicStackChart';
 const IELTSChart = React.memo(({ students }) => {
   const [selected, setSelected] = useState('overall');
   const bands = ['overall', 'reading', 'writing', 'listening', 'speaking'];
+  const bandKeys = ['<5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9'];
+  const bandColors = ['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#14b8a6','#6366f1','#8b5cf6','#10b981'];
 
   const chartData = useMemo(() => {
     const years = [...new Set(students.map(s => s.grad_year).filter(Boolean))].sort();
@@ -349,10 +351,7 @@ const IELTSChart = React.memo(({ students }) => {
       });
       return { year: String(year), avg: avg ? parseFloat(avg) : 0, count: scores.length, ...pcts, rawCounts: dist };
     }).filter(Boolean);
-  }, [students, selected]);
-
-  const bandKeys = ['<5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9'];
-  const bandColors = ['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#14b8a6','#6366f1','#8b5cf6','#10b981'];
+  }, [students, selected, bandKeys]);
 
   return (
     <Card 
