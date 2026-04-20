@@ -121,12 +121,12 @@ const Card = ({ children, className = '', title, icon: Icon, headerExtra }) => {
   };
 
   return (
-    <div ref={cardRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full ${className}`}>
+    <div ref={cardRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full p-2 ${className}`}>
       {title && (
         <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            {Icon && <Icon size={16} className="text-slateBlue-600" />}
-            <h3 className="text-xs font-black text-slateBlue-800 uppercase tracking-widest">{title}</h3>
+            {Icon && <Icon size={18} className="text-slateBlue-600" />}
+            <h3 className="text-[14px] font-black text-slateBlue-800 uppercase tracking-widest">{title}</h3>
           </div>
           <div className="flex items-center gap-2">
              {headerExtra}
@@ -193,9 +193,16 @@ const StackedTooltip = ({ active, payload, label, isNumericGrades }) => {
 // ─── Stacked Bar chart for academics ────────────────────────────────────────
 const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students }) => {
   const [selected, setSelected] = useState('Overall');
-
   const subjectOptions = ['Overall', ...subjectsList];
-  const isNumeric = examKey === 'igcse';
+  
+  const isNumeric = useMemo(() => {
+    if (examKey !== 'igcse') return false;
+    if (selected === 'Overall') return true; // Default IGCSE to numeric
+    const lower = selected.toLowerCase();
+    // Chinese and Arts subjects use A*-G (Letter) scale
+    if (lower.includes('chinese') || lower.includes('art') || lower.includes('design')) return false;
+    return true;
+  }, [examKey, selected]);
 
   const gradeOrder = isNumeric ? NUMERIC_GRADES : LETTER_GRADES;
 
@@ -258,7 +265,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
       // Convert to percentages
       const pcts = {};
       gradeOrder.forEach(g => {
-        pcts[g] = total > 0 ? parseFloat(((counts[g] / total) * 100).toFixed(1)) : 0;
+        pcts[g] = total > 0 ? Math.min(100, Math.round((counts[g] / total) * 100)) : 0;
       });
 
       return { year: String(year), ...pcts, rawCounts: counts, totalCount: total };
@@ -289,10 +296,10 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
         <div className="h-52 flex items-center justify-center text-gray-300 text-xs font-semibold">No grade data available</div>
       ) : (
         <ResponsiveContainer width="100%" height={210}>
-          <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barCategoryGap="30%">
+          <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="year" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${Math.min(100, val)}%`} />
             <Tooltip
               content={(props) => <StackedTooltip {...props} isNumericGrades={isNumeric} />}
               cursor={{ fill: 'rgba(241,245,249,0.7)' }}
@@ -300,7 +307,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
               allowEscapeViewBox={{ x: true, y: true }}
               wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
             />
-            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+            {/* Legend removed per user request */}
             {gradeOrder.map(g => (
               <Bar key={g} dataKey={g} stackId="a" fill={GRADE_COLORS[g]} radius={g === gradeOrder[gradeOrder.length - 1] ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
             ))}
@@ -337,8 +344,8 @@ const IELTSChart = React.memo(({ students }) => {
 
       // Convert to percentages
       const pcts = {};
-      ['<5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9'].forEach(b => {
-        pcts[b] = scores.length > 0 ? parseFloat(((dist[b] / scores.length) * 100).toFixed(1)) : 0;
+      bandKeys.forEach(b => {
+        pcts[b] = scores.length > 0 ? Math.min(100, Math.round((dist[b] / scores.length) * 100)) : 0;
       });
       return { year: String(year), avg: avg ? parseFloat(avg) : 0, count: scores.length, ...pcts, rawCounts: dist };
     }).filter(Boolean);
@@ -369,7 +376,7 @@ const IELTSChart = React.memo(({ students }) => {
         <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="year" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${Math.min(100, val)}%`} />
           <Tooltip 
             content={(props) => {
               if (!props.active || !props.payload || !props.payload.length) return null;
@@ -402,7 +409,7 @@ const IELTSChart = React.memo(({ students }) => {
             wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
             cursor={{ fill: 'rgba(241,245,249,0.7)' }}
           />
-          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+          {/* Legend removed per user request */}
           {bandKeys.map((b, i) => (
             <Bar key={b} dataKey={b} stackId="a" fill={bandColors[i]} radius={b === '9' ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
           ))}
