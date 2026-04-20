@@ -3,6 +3,42 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 
+// ─── Global Error Boundary ────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('App ErrorBoundary caught:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0a192f] flex items-center justify-center p-8">
+          <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl">
+            <div className="text-5xl mb-4">⚠️</div>
+            <h1 className="text-xl font-black text-slate-800 mb-2">Something went wrong</h1>
+            <p className="text-sm text-gray-500 mb-6 font-medium">
+              {this.state.error?.message || 'An unexpected error occurred.'}
+            </p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              className="px-6 py-3 bg-orange-500 text-white rounded-xl font-black text-sm hover:bg-orange-600 transition-all"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Lazy-load pages so each is a separate JS bundle.
 // React only downloads + parses a page's code when the user first navigates to it.
 const Dashboard    = lazy(() => import('./pages/Dashboard'));
@@ -74,13 +110,15 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <QSProvider>
-          <StudentProvider>
-            <AppContent />
-          </StudentProvider>
-        </QSProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <QSProvider>
+            <StudentProvider>
+              <AppContent />
+            </StudentProvider>
+          </QSProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </Router>
   );
 }

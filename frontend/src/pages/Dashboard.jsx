@@ -121,7 +121,7 @@ const Card = ({ children, className = '', title, icon: Icon, headerExtra }) => {
   };
 
   return (
-    <div ref={cardRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full p-2 ${className}`}>
+    <div ref={cardRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full ${className}`}>
       {title && (
         <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
