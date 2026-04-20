@@ -140,7 +140,7 @@ const Card = ({ children, className = '', title, icon: Icon, headerExtra }) => {
           </div>
         </div>
       )}
-      <div className="grow">
+      <div className="grow bg-white rounded-b-2xl">
         {children}
       </div>
     </div>
@@ -504,7 +504,12 @@ const Dashboard = () => {
   }, [liveStudents]);
 
   // Auto-snapshot on first mount (no user action needed)
-  useEffect(() => { takeSnapshot(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-snapshot when data first arrives
+  useEffect(() => {
+    if (liveStudents.length > 0 && snapTime === 0) {
+      takeSnapshot();
+    }
+  }, [liveStudents, snapTime, takeSnapshot]);
 
   // Is the cached snapshot out of date?
   const isStale = lastModified > 0 && lastModified > snapTime;
