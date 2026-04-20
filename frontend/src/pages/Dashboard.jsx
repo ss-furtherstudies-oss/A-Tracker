@@ -9,7 +9,7 @@ import {
   Copy, Download, Check, TrendingUp, Award, RefreshCw
 } from 'lucide-react';
 import { useStudents } from '../context/StudentContext';
-import { IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST } from '../constants/subjects';
+import { IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST, SUBJECT_FULL_NAMES } from '../constants/subjects';
 
 // ─── Grade ordering & colors ────────────────────────────────────────────────
 const LETTER_GRADES = ['U', 'E', 'D', 'C', 'B', 'A', 'A*'];
@@ -286,7 +286,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
             onChange={e => setSelected(e.target.value)}
             className="appearance-none text-[10px] font-black uppercase text-slateBlue-800 bg-slateBlue-100 border border-transparent hover:border-gray-200 rounded px-2.5 py-1 pr-6 focus:outline-none focus:ring-2 focus:ring-aura-teal/20 cursor-pointer"
           >
-            {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            {subjectOptions.map(s => <option key={s} value={s}>{SUBJECT_FULL_NAMES[s] || s}</option>)}
           </select>
           <ChevronDown size={10} className="absolute right-1.5 top-1.5 text-gray-400 pointer-events-none" />
         </div>
