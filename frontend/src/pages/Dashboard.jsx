@@ -203,9 +203,9 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
   
   const isNumeric = useMemo(() => {
     if (examKey !== 'igcse') return false;
-    if (selected === 'Overall') return true; // Default IGCSE to numeric
+    if (selected === 'Overall') return false; // User requested A*-G scale for IGCSE Overall
     const lower = selected.toLowerCase();
-    // Chinese and Arts subjects use A*-G (Letter) scale
+    // Chinese and Arts subjects use A*-G (Letter) scale, so they aren't numeric
     if (lower.includes('chinese') || lower.includes('art') || lower.includes('design')) return false;
     return true;
   }, [examKey, selected]);
@@ -228,7 +228,17 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
         
         if (data.length > 0) {
           // Use detailed subject data if available
-          const filtered = selected === 'Overall' ? data : data.filter(d => d.subject === selected);
+          let filtered = data;
+          if (selected !== 'Overall') {
+            filtered = data.filter(d => d.subject === selected);
+          } else if (examKey === 'igcse') {
+            // Exclude Chinese and Arts from IGCSE Overall
+            filtered = data.filter(d => {
+              const subName = (SUBJECT_FULL_NAMES[d.subject] || d.subject).toLowerCase();
+              return !subName.includes('chinese') && !subName.includes('art') && !subName.includes('design');
+            });
+          }
+
           filtered.forEach(d => {
             const g = d.grade?.toUpperCase().trim();
             if (g && counts[g] !== undefined) {
