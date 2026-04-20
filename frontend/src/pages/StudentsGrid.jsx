@@ -1301,7 +1301,7 @@ const StudentsGrid = () => {
         <div className="overflow-x-auto relative">
           <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
             <thead>
-              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest">
+              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-20 shadow-sm">
                 <SortableHeader label="Year" sortKey="grad_year" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
                 <th className="px-3 py-2.5 w-[50px] text-center">Status</th>
                 <SortableHeader label="Student ID" sortKey="student_num" config={sortConfig} requestSort={requestSort} className="w-[80px] text-center" />
@@ -1314,7 +1314,7 @@ const StudentsGrid = () => {
                 <SortableHeader label="University" sortKey="university_dest" config={sortConfig} requestSort={requestSort} className="w-[350px] min-w-[350px]" />
                 <th className="px-3 py-2.5 w-[50px] text-center">Quali</th>
                 <th className="px-3 py-2.5 w-[350px] min-w-[350px]">Program</th>
-                {role === 'ADMIN' && <th className="px-4 py-2.5 w-[100px] text-center sticky right-0 bg-slateBlue-800 z-20 shadow-[-4px_0_10px_rgba(0,0,0,0.3)]">Actions</th>}
+                {role === 'ADMIN' && <th className="px-4 py-2.5 w-[100px] text-center sticky right-0 bg-slateBlue-800 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.3)]">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
