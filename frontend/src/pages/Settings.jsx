@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Key, Check, AlertCircle, LogOut, Globe, Users, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
+import { Shield, Key, Check, AlertCircle, LogOut, Globe, Users, ShieldCheck, ShieldAlert, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabaseClient';
 
@@ -14,6 +14,9 @@ const Settings = () => {
   const [error, setError] = useState(null);
   const [msg, setMsg] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
 
   // Fetch all users if the current user is an ADMIN
   useEffect(() => {
@@ -21,6 +24,16 @@ const Settings = () => {
       fetchUsers();
     }
   }, [role]);
+
+  // Detect recovery flow from URL hash
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=recovery') || hash.includes('access_token='))) {
+      setShowRecoveryModal(true);
+      // Optional: clear the hash so it doesn't stay in the URL
+      window.history.replaceState(null, null, window.location.pathname);
+    }
+  }, []);
 
   const fetchUsers = async () => {
     setUserLoading(true);
@@ -112,25 +125,43 @@ const Settings = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">New Password</label>
-                  <input
-                    type="password"
-                    placeholder="Minimum 6 characters"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-aura-teal/20 outline-none transition-all font-semibold text-slateBlue-800"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative group">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Minimum 6 characters"
+                      className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-aura-teal/20 outline-none transition-all font-semibold text-slateBlue-800"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-3 text-gray-400 hover:text-aura-teal transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Confirm New Password</label>
-                  <input
-                    type="password"
-                    placeholder="Repeat new password"
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-aura-teal/20 outline-none transition-all font-semibold text-slateBlue-800"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative group">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Repeat new password"
+                      className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-aura-teal/20 outline-none transition-all font-semibold text-slateBlue-800"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-3 text-gray-400 hover:text-aura-teal transition-colors"
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -269,6 +300,82 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Recovery / Reset Password Mandatory Modal */}
+      {showRecoveryModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slateBlue-900/90 backdrop-blur-md p-4">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-10 animate-in zoom-in duration-300">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-50 rounded-2xl mb-4">
+                <ShieldCheck size={32} className="text-orange-500" />
+              </div>
+              <h2 className="text-2xl font-black text-slateBlue-800 tracking-tight">Reset Your Password</h2>
+              <p className="text-sm text-gray-500 mt-2 font-medium">Please set a new secure password to regain full access to your account.</p>
+            </div>
+
+            <form onSubmit={async (e) => {
+              await handleUpdatePassword(e);
+              if (!error) setShowRecoveryModal(false);
+            }} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">New Secure Password</label>
+                <div className="relative group">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Minimum 6 characters"
+                    className="w-full pl-4 pr-12 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-orange-500/20 outline-none transition-all font-semibold text-slateBlue-800"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-3.5 text-gray-400 hover:text-orange-500 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Confirm New Password</label>
+                <div className="relative group">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Repeat password"
+                    className="w-full pl-4 pr-12 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-orange-500/20 outline-none transition-all font-semibold text-slateBlue-800"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-3.5 text-gray-400 hover:text-orange-500 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100 animate-in shake duration-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black text-sm tracking-widest hover:bg-orange-600 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+              >
+                {loading ? "UPDATING..." : "COMPLETE PASSWORD RESET"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
