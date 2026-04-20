@@ -166,11 +166,17 @@ const StackedTooltip = ({ active, payload, label, isNumericGrades }) => {
   if (!active || !payload || !payload.length) return null;
   const items = [...payload].reverse();
   const cols = isNumericGrades ? 'grid-cols-3' : (items.length > 8 ? 'grid-cols-5' : 'grid-cols-4');
+  
+  const studentCount = payload[0].payload.studentCount;
+  const totalCount = payload[0].payload.totalCount || payload[0].payload.count;
+
   return (
     <div className="bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-2xl border border-gray-100 min-w-[120px] pointer-events-none">
       <div className="text-[9px] font-black text-gray-400 mb-1.5 border-b border-gray-100 pb-1 flex justify-between uppercase tracking-tighter gap-3">
         <span>Cohort {label}</span>
-        <span className="text-aura-teal">{payload[0].payload.totalCount || payload[0].payload.count} results</span>
+        <span className="text-aura-teal">
+          {studentCount ? `${studentCount} Students (${totalCount} Grades)` : `${totalCount} Results`}
+        </span>
       </div>
       <div className={`grid ${cols} gap-x-2 gap-y-1.5`}>
         {items.map((entry) => {
@@ -214,8 +220,10 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
       const counts = {};
       gradeOrder.forEach(g => counts[g] = 0);
       let total = 0;
+      let studentCount = 0;
 
       cohort.forEach(s => {
+        let hasDataForThisExam = false;
         const data = s.academicData?.[examKey] || [];
         
         if (data.length > 0) {
@@ -226,6 +234,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
             if (g && counts[g] !== undefined) {
               counts[g]++;
               total++;
+              hasDataForThisExam = true;
             }
           });
         } else if (selected === 'Overall') {
@@ -243,6 +252,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
                 if (counts[g] !== undefined) {
                   counts[g] += count;
                   total += count;
+                  hasDataForThisExam = true;
                 }
               } else {
                 // If they typed something like "A*A*A" (no commas), we could try splitting by characters,
@@ -252,12 +262,14 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
                    if (tempStr === g) {
                       counts[g]++;
                       total++;
+                      hasDataForThisExam = true;
                    }
                 });
               }
             });
           }
         }
+        if (hasDataForThisExam) studentCount++;
       });
 
       if (total === 0) return null; // Filter out years with no results
@@ -268,7 +280,7 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
         pcts[g] = total > 0 ? Math.min(100, Math.round((counts[g] / total) * 100)) : 0;
       });
 
-      return { year: String(year), ...pcts, rawCounts: counts, totalCount: total };
+      return { year: String(year), ...pcts, rawCounts: counts, totalCount: total, studentCount };
     }).filter(Boolean);
   }, [students, examKey, selected, gradeOrder]);
 
@@ -349,7 +361,7 @@ const IELTSChart = React.memo(({ students }) => {
       bandKeys.forEach(b => {
         pcts[b] = scores.length > 0 ? Math.min(100, Math.round((dist[b] / scores.length) * 100)) : 0;
       });
-      return { year: String(year), avg: avg ? parseFloat(avg) : 0, count: scores.length, ...pcts, rawCounts: dist };
+      return { year: String(year), avg: avg ? parseFloat(avg) : 0, count: scores.length, studentCount: scores.length, ...pcts, rawCounts: dist };
     }).filter(Boolean);
   }, [students, selected, bandKeys]);
 
