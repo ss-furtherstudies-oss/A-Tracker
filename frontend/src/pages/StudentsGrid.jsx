@@ -863,6 +863,15 @@ const StudentsGrid = () => {
     advanceConflict('skip');
   };
 
+  const handleCancelImport = () => {
+    if (confirm("Cancel batch import? Any unresolved conflicts will be ignored.")) {
+      setPendingImport(null);
+      setConflictIndex(0);
+      setPendingPreImportData(null);
+      setImportStats({ total: 0, new: 0, merged: 0, skipped: 0, autoSkipped: 0 });
+    }
+  };
+
   const [editIdPrompt, setEditIdPrompt] = useState(null);
 
   const handleConflictEditAndSave = () => {
