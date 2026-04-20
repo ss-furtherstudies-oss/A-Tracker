@@ -230,7 +230,12 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
           // Use detailed subject data if available
           let filtered = data;
           if (selected !== 'Overall') {
-            filtered = data.filter(d => d.subject === selected);
+            const selName = (SUBJECT_FULL_NAMES[selected] || selected).toLowerCase();
+            const selCode = selected.toLowerCase();
+            filtered = data.filter(d => {
+              const sub = d.subject?.toLowerCase();
+              return sub === selCode || sub === selName;
+            });
           } else if (examKey === 'igcse') {
             // Exclude Chinese and Arts from IGCSE Overall
             filtered = data.filter(d => {
