@@ -17,9 +17,9 @@ export const IAS_IAL_LIST_AQA_UK = ["7357", "7367", "7402", "7405", "7408", "751
 export const IAS_IAL_LIST_AQA_INTL = ["9660", "9665", "9610", "9620", "9630", "9625", "9640", "9670", "9675"];
 
 // Backward Compatibility Lists for Stats/Dashboard
-export const IGCSE_SUBJECTS_LIST = Array.from(new Set([...IGCSE_SUBJECTS_LIST_CIE, ...IGCSE_SUBJECTS_LIST_EDEXCEL, "ENG", "MA", "PH", "CM", "BO"]));
-export const IAS_SUBJECTS_LIST = Array.from(new Set([...IAS_IAL_LIST_CIE, ...IAS_IAL_LIST_EDEXCEL_IAS, ...IAS_IAL_LIST_AQA_UK, ...IAS_IAL_LIST_AQA_INTL, "MA", "PH", "CM", "BO"]));
-export const IAL_SUBJECTS_LIST = Array.from(new Set([...IAS_IAL_LIST_CIE, ...IAS_IAL_LIST_EDEXCEL_IAL, ...IAS_IAL_LIST_AQA_UK, ...IAS_IAL_LIST_AQA_INTL, "MA", "PH", "CM", "BO"]));
+export const IGCSE_SUBJECTS_LIST = Array.from(new Set([...IGCSE_SUBJECTS_LIST_CIE, ...IGCSE_SUBJECTS_LIST_EDEXCEL]));
+export const IAS_SUBJECTS_LIST = Array.from(new Set([...IAS_IAL_LIST_CIE, ...IAS_IAL_LIST_EDEXCEL_IAS, ...IAS_IAL_LIST_AQA_UK, ...IAS_IAL_LIST_AQA_INTL]));
+export const IAL_SUBJECTS_LIST = Array.from(new Set([...IAS_IAL_LIST_CIE, ...IAS_IAL_LIST_EDEXCEL_IAL, ...IAS_IAL_LIST_AQA_UK, ...IAS_IAL_LIST_AQA_INTL]));
 
 export const SUBJECT_FULL_NAMES = {
   // CIE IGCSE
