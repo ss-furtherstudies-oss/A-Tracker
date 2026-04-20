@@ -172,7 +172,7 @@ const StackedTooltip = ({ active, payload, label, isNumericGrades }) => {
 
   return (
     <div className="bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-2xl border border-gray-100 min-w-[120px] pointer-events-none">
-      <div className="text-[9px] font-black text-gray-400 mb-1.5 border-b border-gray-100 pb-1 flex justify-between uppercase tracking-tighter gap-3">
+      <div className="text-[10px] font-black text-gray-400 mb-1.5 border-b border-gray-100 pb-1 flex justify-between uppercase tracking-tighter gap-3">
         <span>Cohort {label}</span>
         <span className="text-aura-teal">
           {studentCount ? `${studentCount} Students (${totalCount} Grades)` : `${totalCount} Results`}
@@ -183,10 +183,10 @@ const StackedTooltip = ({ active, payload, label, isNumericGrades }) => {
           const rawCount = entry.payload.rawCounts?.[entry.name];
           return (
             <div key={entry.name} className="flex flex-col items-center leading-none">
-              <span className="text-[9px] font-black uppercase mb-0.5" style={{ color: entry.fill }}>{entry.name}</span>
-              <span className="text-[10px] font-bold text-slateBlue-800">{entry.value}%</span>
+              <span className="text-[10px] font-black uppercase mb-0.5" style={{ color: entry.fill }}>{entry.name}</span>
+              <span className="text-[11px] font-bold text-slateBlue-800">{entry.value}%</span>
               {rawCount !== undefined && (
-                <span className="text-[7px] text-gray-400 font-bold mt-0.5">({rawCount})</span>
+                <span className="text-[8px] text-gray-400 font-bold mt-0.5">({rawCount})</span>
               )}
             </div>
           );
@@ -404,7 +404,7 @@ const IELTSChart = React.memo(({ students }) => {
               const items = [...props.payload].reverse();
               return (
                 <div className="bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-2xl border border-gray-100 min-w-[120px] pointer-events-none">
-                  <div className="text-[9px] font-black text-gray-400 mb-1.5 border-b border-gray-100 pb-1 flex justify-between uppercase tracking-tighter gap-3">
+                  <div className="text-[10px] font-black text-gray-400 mb-1.5 border-b border-gray-100 pb-1 flex justify-between uppercase tracking-tighter gap-3">
                     <span>Cohort {props.label}</span>
                     <span className="text-aura-teal">{props.payload[0].payload.count} results</span>
                   </div>
@@ -413,10 +413,10 @@ const IELTSChart = React.memo(({ students }) => {
                       const rawCount = entry.payload.rawCounts?.[entry.name];
                       return (
                         <div key={entry.name} className="flex flex-col items-center leading-none">
-                          <span className="text-[8px] font-black uppercase text-gray-400 mb-0.5">{entry.name}</span>
-                          <span className="text-[9px] font-bold" style={{ color: entry.fill }}>{entry.value}%</span>
+                          <span className="text-[9px] font-black uppercase text-gray-400 mb-0.5">{entry.name}</span>
+                          <span className="text-[10px] font-bold" style={{ color: entry.fill }}>{entry.value}%</span>
                           {rawCount !== undefined && (
-                            <span className="text-[7px] text-gray-400 font-bold mt-0.5">({rawCount})</span>
+                            <span className="text-[8px] text-gray-400 font-bold mt-0.5">({rawCount})</span>
                           )}
                         </div>
                       );
