@@ -1096,8 +1096,9 @@ const StudentsGrid = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-super shadow-sm border border-gray-100 gap-4">
+      {/* Header & Controls - Sticky at top */}
+      <div className="sticky top-0 z-40 bg-[#f8fafc] pt-2 pb-1">
+        <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-t-super shadow-sm border border-gray-100 gap-4">
         <div className="relative w-full sm:w-96 group">
           <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
           <input
@@ -1176,7 +1177,8 @@ const StudentsGrid = () => {
           )}
         </div>
       </div>
-      {/* Conflict Resolution Modal */}
+    </div>
+    {/* Conflict Resolution Modal */}
       {pendingImport && pendingImport.conflicts[conflictIndex] && (() => {
         const c = pendingImport.conflicts[conflictIndex];
         const ex = c.existing;
@@ -1297,11 +1299,11 @@ const StudentsGrid = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden w-full">
+      <div className="bg-white rounded-b-[1.5rem] shadow-sm border border-gray-100 border-t-0 overflow-hidden w-full relative">
         <div className="overflow-x-auto relative">
           <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
             <thead>
-              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-20 shadow-sm">
+              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-[73px] z-30 shadow-sm transition-all">
                 <SortableHeader label="Year" sortKey="grad_year" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
                 <th className="px-3 py-2.5 w-[50px] text-center">Status</th>
                 <SortableHeader label="Student ID" sortKey="student_num" config={sortConfig} requestSort={requestSort} className="w-[80px] text-center" />
