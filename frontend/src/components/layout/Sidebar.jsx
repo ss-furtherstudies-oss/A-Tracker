@@ -21,7 +21,7 @@ const Sidebar = () => {
     <>
       <nav 
         className={classNames(
-          "hidden md:flex flex-col bg-white border-r border-gray-200 h-screen fixed left-0 top-0 transition-all duration-300 z-50 overflow-hidden",
+          "hidden md:flex flex-col bg-white border-r border-gray-200 h-screen fixed left-0 top-0 transition-all duration-300 z-[100] overflow-hidden",
           isHovered ? "w-64 shadow-deep" : "w-20"
         )}
         onMouseEnter={() => setIsHovered(true)}

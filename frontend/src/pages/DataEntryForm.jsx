@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ImagePlus, Save, ArrowLeft } from 'lucide-react';
 import classNames from 'classnames';
 import { useStudents } from '../context/StudentContext';
-import { useQS } from '../context/QSContext';
-import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesModal';
 
 // Simple Academic Block Template
 const AcademicRow = ({ index }) => (
@@ -24,12 +22,8 @@ const DataEntryForm = () => {
   const [formData, setFormData] = useState({
     name_en: '', name_zh: '', gender: 'MALE', dob: '', phone: '', national_id: '',
     igcse_score: '', ias_score: '', alevel_score: '', ielts_score: '',
-    university_dest: '', program_dest: '', status: 'APPLICANT'
+    status: 'ENROLLED'
   });
-
-  const { findUniversityByName } = useQS();
-  const [unmappedUni, setUnmappedUni] = useState([]);
-  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     if (isEdit && students.length > 0) {
@@ -47,9 +41,7 @@ const DataEntryForm = () => {
           ias_score: student.ias_score || '',
           alevel_score: student.alevel_score || '',
           ielts_score: student.ielts_score || '',
-          university_dest: student.university_dest || '',
-          program_dest: student.program_dest || '',
-          status: student.status || 'APPLICANT'
+          status: student.status || 'ENROLLED'
         });
       }
     }
@@ -57,32 +49,11 @@ const DataEntryForm = () => {
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleSave = async (forceSave = false) => {
-    // Validate university name against QS if not already forced
-    const skippedNames = ['withdrawn', 'others', 'other', '-'];
-    const uni = String(formData.university_dest || '').trim();
-
-    if (!forceSave && uni && !skippedNames.includes(uni.toLowerCase())) {
-      const u = findUniversityByName(uni);
-      if (!u) {
-        setUnmappedUni([uni]);
-        setIsResolving(true);
-        return;
-      } else {
-        // Use normalized name from QS
-        if (uni !== u.university) {
-          setFormData(prev => ({ ...prev, university_dest: u.university }));
-        }
-      }
-    }
-
+  const handleSave = async () => {
     // Save using Context (Supabase)
     try {
       const studentToSave = {
         ...formData,
-        university_dest: formData.university_dest && formData.university_dest !== '-' ? 
-                         (findUniversityByName(formData.university_dest)?.university || formData.university_dest) : 
-                         formData.university_dest,
         entry_term: '2026',
       };
       
@@ -155,17 +126,6 @@ const DataEntryForm = () => {
         <h2 className="text-xl font-bold bg-gradient-to-r from-aura-teal to-serene-indigo bg-clip-text text-transparent border-b border-gray-100 pb-3 mb-8">Academic & University</h2>
         
         <div className="space-y-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <label className="text-[11px] font-bold text-gray-400 mb-1.5 block uppercase tracking-widest">University Destination</label>
-                <input name="university_dest" value={formData.university_dest} onChange={handleChange} placeholder="e.g. University of Oxford" className="w-full text-[14px] font-semibold p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-4 focus:ring-aura-teal/5 focus:border-aura-teal focus:outline-none transition-all shadow-inner" />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-gray-400 mb-1.5 block uppercase tracking-widest">Program / Course</label>
-                <input name="program_dest" value={formData.program_dest} onChange={handleChange} placeholder="e.g. BEng Computer Science" className="w-full text-[14px] font-semibold p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-4 focus:ring-aura-teal/5 focus:border-aura-teal focus:outline-none transition-all shadow-inner" />
-              </div>
-           </div>
-
            <div className="grid grid-cols-1 sm:grid-cols-4 gap-5 pt-8 border-t border-gray-100">
               <div>
                 <label className="text-[11px] font-bold text-gray-400 mb-1.5 block uppercase tracking-widest text-center">IGCSE</label>
@@ -187,20 +147,6 @@ const DataEntryForm = () => {
         </div>
       </div>
 
-      <ResolveUniversitiesModal 
-        isOpen={isResolving}
-        unmappedNames={unmappedUni}
-        onClose={() => {
-          setIsResolving(false);
-          // If they close without mapping, we can still save with the original name 
-          // or we can block it. The request says "always... ask the user to map it back".
-          // I will proceed with save after the modal closes.
-          handleSave(true); 
-        }}
-        onResolve={(oldName, newName) => {
-          setFormData(prev => ({ ...prev, university_dest: newName }));
-        }}
-      />
     </div>
   );
 };

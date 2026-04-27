@@ -5,7 +5,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx-js-style';
 import { useQS } from '../context/QSContext';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabaseClient';
+import * as db from '../lib/supabaseService';
 
 const ScholarshipBadge = ({ type }) => {
   const map = {
@@ -17,10 +17,8 @@ const ScholarshipBadge = ({ type }) => {
     OTHER: { icon: '🏅', color: 'bg-gray-100 text-gray-700' },
     NONE: null
   };
-
   const badge = map[type];
   if (!badge) return <span className="text-gray-300">-</span>;
-
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-medium leading-none whitespace-nowrap ${badge.color}`} title={type}>
       <span>{badge.icon}</span> <span>{type.replace(/_/g, ' ')}</span>
@@ -33,10 +31,9 @@ const StatusBadge = ({ status }) => {
     APPLICANT: 'bg-slateBlue-100 text-slateBlue-800',
     ENROLLED: 'bg-aura-teal/20 text-aura-teal',
     GRADUATED: 'bg-serene-indigo/20 text-serene-indigo',
-    ALUMNI: 'bg-serene-indigo/20 text-serene-indigo', // color unified with graduated
+    ALUMNI: 'bg-serene-indigo/20 text-serene-indigo',
     WITHDRAWN: 'bg-red-100 text-red-700',
   };
-
   const labels = {
     APPLICANT: 'Applicant',
     ENROLLED: 'Studying',
@@ -44,7 +41,6 @@ const StatusBadge = ({ status }) => {
     ALUMNI: 'Grad',
     WITHDRAWN: 'Withdrawn',
   };
-
   return (
     <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight whitespace-nowrap shadow-sm ${colors[status] || colors.APPLICANT}`} title={status}>
       {labels[status] || status}
@@ -54,41 +50,15 @@ const StatusBadge = ({ status }) => {
 
 import StudentEditModal from '../components/modals/StudentEditModal';
 import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesModal';
-import { 
+import {
   IGCSE_SUBJECTS, IAS_SUBJECTS, IAL_SUBJECTS,
   IGCSE_BOARDS, IAS_BOARDS, IAL_BOARDS,
   IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST
 } from '../constants/subjects';
 import { useStudents } from '../context/StudentContext';
 
-const generateSummary = (gradesArr) => {
-  if (!gradesArr || gradesArr.length === 0) return '-';
-  const counts = {};
-  gradesArr.forEach(item => {
-    const g = item.grade?.toUpperCase().trim();
-    if (g && g !== 'NR') counts[g] = (counts[g] || 0) + 1;
-  });
-  if (Object.keys(counts).length === 0) return '-';
-
-  return Object.keys(counts).sort((a, b) => {
-    const aIsNum = !isNaN(a) && a.trim() !== '';
-    const bIsNum = !isNaN(b) && b.trim() !== '';
-
-    // Sort numbers descending
-    if (aIsNum && bIsNum) return Number(b) - Number(a);
-    // Put letters before numbers
-    if (!aIsNum && bIsNum) return -1;
-    if (aIsNum && !bIsNum) return 1;
-
-    // Letters sort
-    if (a === 'A*') return -1;
-    if (b === 'A*') return 1;
-    return a.localeCompare(b);
-  }).map(g => {
-    const isNum = !isNaN(g) && g.trim() !== '';
-    return isNum ? `${counts[g]}x${g}` : `${counts[g]}${g}`;
-  }).join(', ');
-};
+import { generateSummary } from '../utils/gradeUtils';
+import { normalizeSubjectForImport } from '../utils/importUtils';
 
 const GradeBadge = ({ text }) => {
   if (!text) return null;
@@ -175,12 +145,8 @@ const StudentsGrid = () => {
 
   const handleClearAll = async () => {
     if (confirm("⚠️ CRITICAL WARNING\n\nThis will permanently delete ALL student records AND university application data in the system.\n\nThis action cannot be undone. Continue?")) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      
-      // Delete all students (cascade will handle apps if set up, or we delete both)
-      await supabase.from('applications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('students').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await db.clearAllApplications();
+      await db.clearAllStudents();
       
       window.location.reload(); // Hard refresh to clear everything
     }
@@ -608,7 +574,7 @@ const StudentsGrid = () => {
         if (!row.student_num) return;
 
         // Helper to parse subject data - supports multiple prefixes (FULL template vs individual templates)
-        const parseSubjectData = (prefixes, noPrefixFallback = false) => {
+        const parseSubjectData = (examLevel, prefixes, noPrefixFallback = false) => {
           const subjects = [];
           const seen = new Set();
           
@@ -619,10 +585,15 @@ const StudentsGrid = () => {
                 if (seen.has(subjectName)) return;
                 const grade = String(row[key] || '').trim();
                 if (grade) {
+                  const normalized = normalizeSubjectForImport(
+                    examLevel,
+                    row[`${prefix}${subjectName}_board`] || '',
+                    subjectName
+                  );
                   seen.add(subjectName);
                   subjects.push({
-                    subject: subjectName.replace(/_/g, ' '),
-                    board: row[`${prefix}${subjectName}_board`] || '',
+                    subject: normalized.subject,
+                    board: normalized.board,
                     grade: grade,
                     value: row[`${prefix}${subjectName}_score`] || ''
                   });
@@ -642,10 +613,15 @@ const StudentsGrid = () => {
                 if (seen.has(subjectName)) return;
                 const grade = String(row[key] || '').trim();
                 if (grade) {
+                  const normalized = normalizeSubjectForImport(
+                    examLevel,
+                    row[`${subjectName}_board`] || '',
+                    subjectName
+                  );
                   seen.add(subjectName);
                   subjects.push({
-                    subject: subjectName.replace(/_/g, ' '),
-                    board: row[`${subjectName}_board`] || '',
+                    subject: normalized.subject,
+                    board: normalized.board,
                     grade: grade,
                     value: row[`${subjectName}_score`] || ''
                   });
@@ -666,9 +642,9 @@ const StudentsGrid = () => {
           return null;
         };
 
-        const ig = parseSubjectData(['IG_'], true);
-        const ia = parseSubjectData(['AS_'], true);
-        const il = parseSubjectData(['AL_'], true);
+        const ig = parseSubjectData('IG', ['IG_'], true);
+        const ia = parseSubjectData('AS', ['AS_'], true);
+        const il = parseSubjectData('AL', ['AL_'], true);
         const ieRaw = {
           reading: getVal(['reading', 'Reading']),
           writing: getVal(['writing', 'Writing']),
@@ -822,13 +798,15 @@ const StudentsGrid = () => {
 
   const handleConflictMergeAll = async () => {
     const remaining = pendingImport.conflicts.slice(conflictIndex);
+    const isSkip = (val) => val === null || val === undefined || String(val).trim() === '' || String(val).trim() === '-';
     const toUpdate = remaining.map(conflict => {
       let updated = { ...conflict.existing };
       const incoming = conflict.imported;
 
       Object.keys(incoming).forEach(key => {
-        if (incoming[key] !== null && key !== 'id' && !key.startsWith('_')) {
-          if (key === 'academicData' && incoming._academicModified) {
+        if (!isSkip(incoming[key]) && key !== 'id' && !key.startsWith('_')) {
+          if (key === 'academicData') {
+            if (!incoming._academicModified) return;
             updated.academicData = {
               ...updated.academicData,
               igcse: incoming.academicData.igcse.length > 0 ? incoming.academicData.igcse : updated.academicData.igcse,
@@ -836,7 +814,7 @@ const StudentsGrid = () => {
               ial: incoming.academicData.ial.length > 0 ? incoming.academicData.ial : updated.academicData.ial,
               ielts: incoming.academicData.ielts.overall ? incoming.academicData.ielts : updated.academicData.ielts
             };
-          } else if (key !== 'academicData') {
+          } else {
             updated[key] = incoming[key];
           }
         }
@@ -1300,10 +1278,10 @@ const StudentsGrid = () => {
       )}
 
       <div className="bg-white rounded-b-[1.5rem] shadow-sm border border-gray-100 border-t-0 overflow-hidden w-full relative">
-        <div className="overflow-x-auto relative">
+        <div className="overflow-auto max-h-[70vh] relative">
           <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
             <thead>
-              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-[73px] z-30 shadow-sm transition-all">
+              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-30 shadow-sm transition-all">
                 <SortableHeader label="Year" sortKey="grad_year" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
                 <th className="px-3 py-2.5 w-[50px] text-center">Status</th>
                 <SortableHeader label="Student ID" sortKey="student_num" config={sortConfig} requestSort={requestSort} className="w-[80px] text-center" />

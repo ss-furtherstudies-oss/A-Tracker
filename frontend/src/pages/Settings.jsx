@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Shield, Key, Check, AlertCircle, LogOut, Globe, Users, ShieldCheck, ShieldAlert, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../lib/supabaseClient';
+import * as db from '../lib/supabaseService';
 
 const Settings = () => {
   const { user, role, updatePassword, signOut } = useAuth();
@@ -37,19 +37,13 @@ const Settings = () => {
 
   const fetchUsers = async () => {
     setUserLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('email');
+    const { data, error } = await db.fetchProfiles();
     if (!error) setAllUsers(data);
     setUserLoading(false);
   };
 
   const handleRoleChange = async (userId, newRole) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', userId);
+    const { error } = await db.updateProfileRole(userId, newRole);
 
     if (error) {
       setError(error.message);

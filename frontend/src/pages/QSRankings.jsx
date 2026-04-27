@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Upload, TrendingUp, TrendingDown, Minus, X, Globe, BookOpen, Plus } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { Search, Upload, Download, TrendingUp, TrendingDown, Minus, X, Globe, BookOpen, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { useQS } from '../context/QSContext';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,15 @@ const QSRankings = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [importMsg, setImportMsg] = useState(null);
   const [subjectFilter, setSubjectFilter] = useState('All');
+
+  const headerScrollRef = useRef(null);
+  const bodyScrollRef = useRef(null);
+
+  const handleBodyScroll = (e) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
 
   const currentData = activeTab === 'overall' ? overallData : subjectData;
 
@@ -299,6 +308,37 @@ const QSRankings = () => {
     }
   };
 
+  const handleBackupQSList = () => {
+    const sortByRank = (rows) =>
+      [...rows].sort((a, b) => {
+        const aRank = a.rank_latest;
+        const bRank = b.rank_latest;
+        if (aRank === null && bRank === null) return 0;
+        if (aRank === null) return 1;
+        if (bRank === null) return -1;
+        return aRank - bRank;
+      });
+
+    const toRows = (rows) =>
+      rows.map((r) => ({
+        University: r.university || '',
+        Latest_Rank: r.rank_latest ?? '',
+        Previous_Rank: r.rank_prev ?? '',
+        Location: r.location || '',
+        Subject: r.subject || ''
+      }));
+
+    const wb = XLSX.utils.book_new();
+    const overallSheet = XLSX.utils.json_to_sheet(toRows(sortByRank(overallData)));
+    XLSX.utils.book_append_sheet(wb, overallSheet, 'QS_Overall');
+
+    const subjectSheet = XLSX.utils.json_to_sheet(toRows(sortByRank(subjectData)));
+    XLSX.utils.book_append_sheet(wb, subjectSheet, 'QS_By_Subject');
+
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `QS_Rankings_Backup_${today}.xlsx`);
+  };
+
   const ChangeIndicator = ({ change }) => {
     if (change === null || change === undefined) return <span className="text-gray-300">—</span>;
     if (change > 0) return (
@@ -323,85 +363,94 @@ const QSRankings = () => {
   const yearPrevLabel = currentData[0]?.yearPrev || 'Previous';
 
   return (
-    <div className="space-y-4">
-      {/* Top Control Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-super shadow-sm border border-gray-100 gap-4">
+    <div className="flex flex-col h-[calc(100vh-140px)] min-h-0">
+      {/* 1. STATIONARY CONTROL BAR (Tabs/Search) */}
+      <div className="shrink-0 z-40 bg-slateBlue-100 pb-4">
+        {/* 1. Control Bar */}
+        <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-t-super border border-gray-100 border-b-0 gap-4 shadow-sm">
+          {/* Left: Tab Buttons + Search */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {/* Tab Toggle */}
+            <div className="flex bg-slateBlue-100/50 p-1 rounded-super">
+              <button
+                onClick={() => { setActiveTab('overall'); setSubjectFilter('All'); }}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-super transition-all ${
+                  activeTab === 'overall'
+                    ? 'bg-white text-aura-teal shadow-sm'
+                    : 'text-gray-500 hover:text-slateBlue-800'
+                }`}
+              >
+                <Globe size={14} /> Overall
+              </button>
+              <button
+                onClick={() => setActiveTab('subject')}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-super transition-all ${
+                  activeTab === 'subject'
+                    ? 'bg-white text-aura-teal shadow-sm'
+                    : 'text-gray-500 hover:text-slateBlue-800'
+                }`}
+              >
+                <BookOpen size={14} /> By Subject
+              </button>
+            </div>
 
-        {/* Left: Tab Buttons + Search */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          {/* Tab Toggle */}
-          <div className="flex bg-slateBlue-100/50 p-1 rounded-super">
-            <button
-              onClick={() => { setActiveTab('overall'); setSubjectFilter('All'); }}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-super transition-all ${
-                activeTab === 'overall'
-                  ? 'bg-white text-aura-teal shadow-sm'
-                  : 'text-gray-500 hover:text-slateBlue-800'
-              }`}
-            >
-              <Globe size={14} /> Overall
-            </button>
-            <button
-              onClick={() => setActiveTab('subject')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-super transition-all ${
-                activeTab === 'subject'
-                  ? 'bg-white text-aura-teal shadow-sm'
-                  : 'text-gray-500 hover:text-slateBlue-800'
-              }`}
-            >
-              <BookOpen size={14} /> By Subject
-            </button>
+            {/* Subject Filter (only visible on subject tab) */}
+            {activeTab === 'subject' && subjects.length > 1 && (
+              <select
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+                className="appearance-none px-4 py-2 text-xs font-bold text-slateBlue-800 bg-slateBlue-100/50 rounded-super hover:bg-slateBlue-100 transition-all border border-transparent focus:border-aura-teal outline-none focus:ring-2 focus:ring-aura-teal/20 cursor-pointer max-w-[200px]"
+              >
+                {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+
+            {/* Search */}
+            <div className="relative w-full sm:w-64 group">
+              <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
+              <input
+                type="text"
+                placeholder="Search university, location..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-8 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
+                >
+                  <X size={14} strokeWidth={3} />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Subject Filter (only visible on subject tab) */}
-          {activeTab === 'subject' && subjects.length > 1 && (
-            <select
-              value={subjectFilter}
-              onChange={(e) => setSubjectFilter(e.target.value)}
-              className="appearance-none px-4 py-2 text-xs font-bold text-slateBlue-800 bg-slateBlue-100/50 rounded-super hover:bg-slateBlue-100 transition-all border border-transparent focus:border-aura-teal outline-none focus:ring-2 focus:ring-aura-teal/20 cursor-pointer max-w-[200px]"
-            >
-              {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-
-          {/* Search */}
-          <div className="relative w-full sm:w-64 group">
-            <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
-            <input
-              type="text"
-              placeholder="Search university, location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-8 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
-              >
-                <X size={14} strokeWidth={3} />
-              </button>
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            {role === 'ADMIN' && (
+              <>
+                <button
+                  onClick={handleBackupQSList}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slateBlue-800 bg-white border border-gray-200 rounded-super hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+                >
+                  <Download size={14} /> BACKUP QS LIST
+                </button>
+                <button 
+                  onClick={handleAddManual}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slateBlue-800 bg-white border border-gray-200 rounded-super hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+                >
+                  <Plus size={14} /> ADD UNIVERSITY
+                </button>
+                <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-aura-teal rounded-super hover:opacity-90 transition-all shadow-sm cursor-pointer active:scale-95">
+                  <Upload size={14} /> UPLOAD QS DATA
+                  <input type="file" accept=".xlsx, .xls" onChange={handleImport} className="hidden" />
+                </label>
+              </>
             )}
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2">
-          {role === 'ADMIN' && (
-            <>
-              <button 
-                onClick={handleAddManual}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slateBlue-800 bg-white border border-gray-200 rounded-super hover:bg-gray-50 transition-all shadow-sm active:scale-95"
-              >
-                <Plus size={14} /> ADD UNIVERSITY
-              </button>
-              <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-aura-teal rounded-super hover:opacity-90 transition-all shadow-sm cursor-pointer active:scale-95">
-                <Upload size={14} /> UPLOAD QS DATA
-                <input type="file" accept=".xlsx, .xls" onChange={handleImport} className="hidden" />
-              </label>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Import Toast */}
@@ -418,12 +467,12 @@ const QSRankings = () => {
         </div>
       )}
 
-      {/* Data Table */}
-      <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden w-full">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slateBlue-800 border-collapse">
-            <thead>
-              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[9px] tracking-widest">
+      {/* 2. TABLE CONTENT: Grid with Sticky Header */}
+      <div className="flex-1 min-h-0 bg-white rounded-super shadow-sm border border-gray-100 overflow-hidden w-full relative flex flex-col">
+        <div className="flex-1 overflow-auto relative">
+          <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
+            <thead className="sticky top-0 z-30 bg-slateBlue-800 text-white">
+              <tr className="uppercase font-black text-[9px] tracking-widest h-[40px]">
                 <th className="px-3 py-2 w-16 text-center">{yearLatestLabel}</th>
                 <th className="px-3 py-2 w-16 text-center">{yearPrevLabel}</th>
                 <th className="px-3 py-2 w-20 text-center">Change</th>

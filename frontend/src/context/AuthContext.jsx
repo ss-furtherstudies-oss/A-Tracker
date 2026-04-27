@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import * as db from '../lib/supabaseService';
 
 const AuthContext = createContext();
 
@@ -22,11 +23,7 @@ export const AuthProvider = ({ children }) => {
             setRole('ADMIN');
           } else {
             // Fetch role from public.profiles with error handling
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('role')
-              .eq('id', currentUser.id)
-              .single();
+            const { data: profile, error } = await db.fetchProfileById(currentUser.id);
             
             if (error) {
               console.warn("Profile fetch error (table might not exist yet):", error.message);
@@ -55,11 +52,7 @@ export const AuthProvider = ({ children }) => {
           if (currentUser.email === 'ss-furtherstudies@hkbuas.edu.hk') {
             setRole('ADMIN');
           } else {
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('role')
-              .eq('id', currentUser.id)
-              .single();
+            const { data: profile, error } = await db.fetchProfileById(currentUser.id);
             
             if (error) {
               setRole('VIEWER');

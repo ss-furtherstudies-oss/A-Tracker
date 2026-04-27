@@ -2,24 +2,36 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, Cell, PieChart, Pie
+  Legend, Cell, PieChart, Pie, LabelList
 } from 'recharts';
 import { 
   Users, GraduationCap, School, Globe, BookOpen, ChevronDown, 
   Copy, Download, Check, TrendingUp, Award, RefreshCw
 } from 'lucide-react';
 import { useStudents } from '../context/StudentContext';
-import { IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST, SUBJECT_FULL_NAMES } from '../constants/subjects';
+import { getChartSubjectOptions, doesSubjectMatchChartOption } from '../constants/subjects';
 
 // ─── Grade ordering & colors ────────────────────────────────────────────────
 const LETTER_GRADES = ['U', 'E', 'D', 'C', 'B', 'A', 'A*'];
+const IGCSE_LETTER_GRADES = ['U', 'G', 'F', 'E', 'D', 'C', 'B', 'A', 'A*'];
 const NUMERIC_GRADES = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 const GRADE_COLORS = {
   'U':  '#ef4444', 'E':  '#f97316', 'D':  '#f59e0b',
+  'F':  '#fb7185', 'G':  '#fda4af',
   'C':  '#eab308', 'B':  '#84cc16', 'A':  '#22c55e', 'A*': '#10b981',
   '1':  '#ef4444', '2':  '#f97316', '3':  '#f59e0b', '4':  '#eab308',
   '5':  '#84cc16', '6':  '#22c55e', '7':  '#14b8a6', '8':  '#6366f1', '9':  '#8b5cf6',
+};
+
+const normalizeIGCSEGrade = (grade) => {
+  const g = String(grade || '').toUpperCase().trim();
+  return IGCSE_LETTER_GRADES.includes(g) ? g : '';
+};
+
+const normalizeIGCSENumericGrade = (grade) => {
+  const g = String(grade || '').trim();
+  return NUMERIC_GRADES.includes(g) ? g : '';
 };
 
 // ─── Program classification ──────────────────────────────────────────────────
@@ -43,17 +55,17 @@ const classifyProgram = (program) => {
 
 // ─── Country mapping from university name ────────────────────────────────────
 const COUNTRY_KEYWORDS = {
-  'United Kingdom': ['oxford', 'cambridge', 'imperial', 'ucl', 'london', 'edinburgh', 'manchester', 'bristol', 'warwick', 'exeter', 'bath', 'durham', 'king', 'queen', 'nottingham', 'southampton', 'glasgow', 'st andrews', 'lse', 'goldsmiths', 'kingston'],
-  'Hong Kong SAR':  ['hong kong', 'hku', 'cuhk', 'hkust', 'polyu', 'cityu', 'lingnan', 'chu hai', 'hkbu', 'shue yan'],
-  'United States':  ['harvard', 'mit', 'stanford', 'yale', 'princeton', 'columbia', 'chicago', 'pennsylvania', 'cornell', 'university of california', 'uc ', 'ucla', 'usc', 'duke', 'johns hopkins', 'purdue', 'davis', 'san diego', 'michigan', 'northwestern', 'nyu', 'carnegie'],
-  'Australia':      ['australian', 'melbourne', 'sydney', 'queensland', 'monash', 'unsw', 'anu', 'uwa', 'adelaide', 'macquarie', 'rmit'],
-  'Canada':         ['toronto', 'mcgill', 'ubc', 'waterloo', 'alberta', 'queens', 'dalhousie', 'ottawa', 'western', 'montreal'],
-  'Singapore':      ['singapore', 'nus', 'ntu', 'smu'],
-  'Netherlands':    ['delft', 'netherlands', 'leiden', 'amsterdam', 'rotterdam', 'eindhoven', 'twente', 'utrecht', 'groningen'],
-  'Japan':          ['tokyo', 'kyoto', 'osaka', 'waseda', 'keio', 'nagoya', 'hiroshima', 'tohoku'],
-  'Germany':        ['munich', 'berlin', 'heidelberg', 'hamburg', 'frankfurt', 'bonn', 'tübingen', 'freiburg', 'lmu'],
-  'China Mainland': ['peking', 'tsinghua', 'fudan', 'zhejiang', 'nanjing', 'tongji', 'wuhan', 'renmin', 'sun yat'],
-  'Taiwan':         ['taiwan', 'nthu', 'ntu', 'ncku', 'yuan ze', 'tamkang'],
+  'United Kingdom': ['oxford', 'cambridge', 'imperial', 'ucl', 'london', 'edinburgh', 'manchester', 'bristol', 'warwick', 'exeter', 'bath', 'durham', 'king', 'queen', 'nottingham', 'southampton', 'glasgow', 'st andrews', 'lse', 'goldsmiths', 'kingston', 'leeds', 'birmingham', 'sheffield', 'sussex', 'surrey', 'kent', 'leicester', 'reading', 'lancaster', 'loughborough', 'newcastle', 'cardiff', 'swansea', 'aberdeen', 'strathclyde', 'stirling', 'dundee', 'royal holloway', 'city university of london', 'brunel', 'westminster', 'hertfordshire', 'anglia ruskin', 'northumbria', 'plymouth', 'central lancashire', 'salford', 'portsmouth', 'brighton', 'huddersfield', 'lincoln', 'roehampton', 'gloucestershire', 'coventry', 'york', 'liverpool', 'uk)', '(uk'],
+  'Hong Kong SAR':  ['hong kong', 'hku', 'cuhk', 'hkust', 'polyu', 'cityu', 'lingnan', 'chu hai', 'hkbu', 'shue yan', 'hkmu', 'hsuhk', 'hkapa', 'twc', 'vtc', 'hk)', '(hk'],
+  'United States':  ['harvard', 'mit', 'stanford', 'yale', 'princeton', 'columbia', 'chicago', 'pennsylvania', 'cornell', 'university of california', 'uc ', 'ucla', 'usc', 'duke', 'johns hopkins', 'purdue', 'davis', 'san diego', 'michigan', 'northwestern', 'nyu', 'carnegie', 'georgia tech', 'caltech', 'penn state', 'texas', 'florida', 'wisconsin', 'maryland', 'boston', 'ohio state', 'washington', 'minnesota', 'purdue', 'rice', 'notre dame', 'vanderbilt', 'emory', 'us)', '(us'],
+  'Australia':      ['australian', 'melbourne', 'sydney', 'queensland', 'monash', 'unsw', 'anu', 'uwa', 'adelaide', 'macquarie', 'rmit', 'curtin', 'deakin', 'griffith', 'tasmania', 'swinburne', 'uts', 'la trobe', 'wollongong', 'australia', 'au)', '(au'],
+  'Canada':         ['toronto', 'mcgill', 'ubc', 'waterloo', 'alberta', 'queens', 'dalhousie', 'ottawa', 'western', 'montreal', 'calgary', 'simon fraser', 'mcmaster', 'victoria', 'saskatchewan', 'york u', 'concordia', 'canada', 'ca)', '(ca'],
+  'Singapore':      ['singapore', 'nus', 'ntu', 'smu', 'sutd', 'sg)', '(sg'],
+  'Netherlands':    ['delft', 'netherlands', 'leiden', 'amsterdam', 'rotterdam', 'eindhoven', 'twente', 'utrecht', 'groningen', 'maastricht', 'wageningen', 'nijmegen', 'nl)', '(nl'],
+  'Japan':          ['tokyo', 'kyoto', 'osaka', 'waseda', 'keio', 'nagoya', 'hiroshima', 'tohoku', 'kyushu', 'hokudai', 'tokyotech', 'japan', 'jp)', '(jp'],
+  'Germany':        ['munich', 'berlin', 'heidelberg', 'hamburg', 'frankfurt', 'bonn', 'tübingen', 'freiburg', 'lmu', 'rwth', 'karlsruhe', 'dresden', 'stuttgart', 'germany', 'de)', '(de'],
+  'China Mainland': ['peking', 'tsinghua', 'fudan', 'zhejiang', 'nanjing', 'tongji', 'wuhan', 'renmin', 'sun yat', 'sjtu', 'ustc', 'harbin', 'xian jiaotong', 'sichuan', 'shandong', 'beihang', 'china', 'cn)', '(cn'],
+  'Taiwan':         ['taiwan', 'nthu', 'ntu', 'ncku', 'yuan ze', 'tamkang', 'nctu', 'nsysu', 'ntust', 'tw)', '(tw'],
 };
 
 const inferCountry = (uniName) => {
@@ -121,9 +133,9 @@ const Card = ({ children, className = '', title, icon: Icon, headerExtra }) => {
   };
 
   return (
-    <div ref={cardRef} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full ${className}`}>
+    <div ref={cardRef} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-visible relative group flex flex-col h-full">
       {title && (
-        <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between shrink-0">
+        <div className="px-5 py-2.5 border-b border-gray-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             {Icon && <Icon size={18} className="text-slateBlue-600" />}
             <h3 className="text-[14px] font-black text-slateBlue-800 uppercase tracking-widest">{title}</h3>
@@ -140,7 +152,7 @@ const Card = ({ children, className = '', title, icon: Icon, headerExtra }) => {
           </div>
         </div>
       )}
-      <div className="grow bg-white rounded-b-2xl">
+      <div className={`grow bg-white rounded-b-2xl ${className}`}>
         {children}
       </div>
     </div>
@@ -197,20 +209,47 @@ const StackedTooltip = ({ active, payload, label, isNumericGrades }) => {
 };
 
 // ─── Stacked Bar chart for academics ────────────────────────────────────────
-const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students }) => {
+const AcademicStackChart = React.memo(({ title, examKey, students }) => {
   const [selected, setSelected] = useState('Overall');
-  const subjectOptions = ['Overall', ...subjectsList];
-  
-  const isNumeric = useMemo(() => {
-    if (examKey !== 'igcse') return false;
-    if (selected === 'Overall') return false; // User requested A*-G scale for IGCSE Overall
-    const lower = selected.toLowerCase();
-    // Chinese and Arts subjects use A*-G (Letter) scale, so they aren't numeric
-    if (lower.includes('chinese') || lower.includes('art') || lower.includes('design')) return false;
-    return true;
-  }, [examKey, selected]);
+  const ialNumericSubjects = new Set(['9CN0', '9FA0', '9EN0']);
 
-  const gradeOrder = isNumeric ? NUMERIC_GRADES : LETTER_GRADES;
+  const subjectOptions = useMemo(() => {
+    return [{ value: 'Overall', label: 'Overall' }, ...getChartSubjectOptions(examKey)];
+  }, [examKey]);
+
+  useEffect(() => {
+    if (!subjectOptions.some(opt => opt.value === selected)) {
+      setSelected('Overall');
+    }
+  }, [subjectOptions, selected]);
+
+  const ialShouldUseNumeric = useMemo(() => {
+    if (examKey !== 'ial' || selected === 'Overall' || !ialNumericSubjects.has(selected)) return false;
+    for (const s of students) {
+      const data = s.academicData?.[examKey] || [];
+      const filtered = data.filter(d => doesSubjectMatchChartOption(examKey, selected, d.subject));
+      for (const d of filtered) {
+        if (normalizeIGCSENumericGrade(d.grade)) return true;
+      }
+    }
+    return false;
+  }, [examKey, selected, students]);
+
+  const isNumeric = useMemo(() => {
+    if (examKey === 'igcse') {
+      return selected === '4CN1' || selected === '4FA1';
+    }
+    if (examKey === 'ial') {
+      return ialNumericSubjects.has(selected) && ialShouldUseNumeric;
+    }
+    return false;
+  }, [examKey, selected, ialShouldUseNumeric]);
+
+  const gradeOrder = examKey === 'igcse'
+    ? (isNumeric ? NUMERIC_GRADES : IGCSE_LETTER_GRADES)
+    : examKey === 'ial'
+      ? (isNumeric ? NUMERIC_GRADES : LETTER_GRADES)
+      : LETTER_GRADES;
 
   const chartData = useMemo(() => {
     const years = [...new Set(students.map(s => s.grad_year).filter(Boolean))].sort();
@@ -230,22 +269,15 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
           // Use detailed subject data if available
           let filtered = data;
           if (selected !== 'Overall') {
-            const selName = (SUBJECT_FULL_NAMES[selected] || selected).toLowerCase();
-            const selCode = selected.toLowerCase();
-            filtered = data.filter(d => {
-              const sub = d.subject?.toLowerCase();
-              return sub === selCode || sub === selName;
-            });
-          } else if (examKey === 'igcse') {
-            // Exclude Chinese and Arts from IGCSE Overall
-            filtered = data.filter(d => {
-              const subName = (SUBJECT_FULL_NAMES[d.subject] || d.subject).toLowerCase();
-              return !subName.includes('chinese') && !subName.includes('art') && !subName.includes('design');
-            });
+            filtered = data.filter(d => doesSubjectMatchChartOption(examKey, selected, d.subject));
           }
 
           filtered.forEach(d => {
-            const g = d.grade?.toUpperCase().trim();
+            const g = examKey === 'igcse'
+              ? (isNumeric ? normalizeIGCSENumericGrade(d.grade) : normalizeIGCSEGrade(d.grade))
+              : examKey === 'ial'
+                ? (isNumeric ? normalizeIGCSENumericGrade(d.grade) : d.grade?.toUpperCase().trim())
+                : d.grade?.toUpperCase().trim();
             if (g && counts[g] !== undefined) {
               counts[g]++;
               total++;
@@ -263,7 +295,11 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
               const match = part.trim().match(/^(\d+)?\s*x?\s*([a-zA-Z*]+|\d+)$/);
               if (match) {
                 const count = match[1] ? parseInt(match[1]) : 1;
-                const g = match[2].toUpperCase();
+                const g = examKey === 'igcse'
+                  ? (isNumeric ? normalizeIGCSENumericGrade(match[2]) : normalizeIGCSEGrade(match[2]))
+                  : examKey === 'ial'
+                    ? (isNumeric ? normalizeIGCSENumericGrade(match[2]) : match[2].toUpperCase())
+                    : match[2].toUpperCase();
                 if (counts[g] !== undefined) {
                   counts[g] += count;
                   total += count;
@@ -313,9 +349,9 @@ const AcademicStackChart = React.memo(({ title, examKey, subjectsList, students 
             onChange={e => setSelected(e.target.value)}
             className="appearance-none text-[10px] font-black uppercase text-slateBlue-800 bg-slateBlue-100 border border-transparent hover:border-gray-200 rounded px-2.5 py-1 pr-6 focus:outline-none focus:ring-2 focus:ring-aura-teal/20 cursor-pointer"
           >
-            {subjectOptions.map(s => (
-              <option key={s} value={s}>
-                {s === 'Overall' ? s : `${s} - ${SUBJECT_FULL_NAMES[s] || s}`}
+            {subjectOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
@@ -475,7 +511,7 @@ const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, n
 };
 
 // ─── Country Bar Charts ───────────────────────────────────────────────────────
-const CountryChart = ({ students, title, color }) => {
+const CountryChart = ({ students, title, color, headerExtra }) => {
   const data = useMemo(() => {
     const map = {};
     students.forEach(s => {
@@ -489,12 +525,12 @@ const CountryChart = ({ students, title, color }) => {
   }, [students]);
 
   return (
-    <Card title={title} className="p-5" icon={Globe}>
+    <Card title={title} className="p-5" icon={Globe} headerExtra={headerExtra}>
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 45, left: 10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-          <XAxis type="number" hide />
-          <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+          <XAxis type="number" hide domain={[0, 'dataMax + 5']} />
+          <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
           <Tooltip 
             contentStyle={{ fontSize: 9, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', boxShadow: '0 8px 30px rgba(0,0,0,0.1)', padding: '6px 10px', color: '#1e293b' }} 
             itemStyle={{ color: '#14b8a6', fontWeight: 900, fontSize: 10 }}
@@ -507,6 +543,28 @@ const CountryChart = ({ students, title, color }) => {
           />
           <Bar dataKey="pct" fill={color} radius={[0, 6, 6, 0]} barSize={16}>
             {data.map((entry, i) => <Cell key={i} fill={color} opacity={1 - i * 0.08} />)}
+            <LabelList 
+              dataKey="pct" 
+              position="right" 
+              content={(props) => {
+                const { x, y, width, height, value, index } = props;
+                const entry = data[index];
+                if (!entry) return null;
+                return (
+                  <text 
+                    x={x + width + 8} 
+                    y={y + height / 2} 
+                    fill="#94a3b8" 
+                    fontSize={10} 
+                    fontWeight={800} 
+                    textAnchor="start" 
+                    dominantBaseline="middle"
+                  >
+                    {`${value}% (${entry.count})`}
+                  </text>
+                );
+              }}
+            />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -519,6 +577,7 @@ const Dashboard = () => {
   const { t } = useTranslation();
   const { students: liveStudents, lastModified } = useStudents();
   const [fieldModal, setFieldModal] = useState(null);
+  const [selectedCohortYear, setSelectedCohortYear] = useState('auto');
 
   // ── Snapshot cache ──────────────────────────────────────────────────────────
   // Charts render from `snapStudents` (frozen copy), not live context.
@@ -574,12 +633,22 @@ const Dashboard = () => {
 
   const totalFieldStudents = useMemo(() => fieldData.reduce((a, b) => a + b.value, 0), [fieldData]);
 
-  const graduatedStudents = useMemo(() => students.filter(s => s.university_dest && s.university_dest !== '-'), [students]);
+  const graduatedStudents = useMemo(() => students.filter(s => {
+    const dest = String(s.university_dest || '').trim().toLowerCase();
+    return s.status !== 'WITHDRAWN' && dest && dest !== '-' && dest !== 'tbc' && dest !== 'pending' && dest !== 'unknown';
+  }), [students]);
 
-  const latestYear = useMemo(() => {
-    const years = graduatedStudents.map(s => s.grad_year).filter(y => typeof y === 'number' && !isNaN(y));
-    return years.length > 0 ? Math.max(...years) : null;
+  const cohortYears = useMemo(() => {
+    const years = [...new Set(graduatedStudents.map(s => s.grad_year))].filter(Boolean).sort((a, b) => b - a);
+    return years;
   }, [graduatedStudents]);
+
+  const latestYearWithData = cohortYears[0] || null;
+
+  const activeCohortYear = useMemo(() => {
+    if (selectedCohortYear === 'auto') return latestYearWithData;
+    return parseInt(selectedCohortYear);
+  }, [selectedCohortYear, latestYearWithData]);
 
   return (
     <div className="space-y-6">
@@ -626,19 +695,16 @@ const Dashboard = () => {
           <AcademicStackChart
             title="IGCSE Results"
             examKey="igcse"
-            subjectsList={IGCSE_SUBJECTS_LIST}
             students={students}
           />
           <AcademicStackChart
             title="IAS Results"
             examKey="ias"
-            subjectsList={IAS_SUBJECTS_LIST}
             students={students}
           />
           <AcademicStackChart
             title="IAL / GCEAL Results"
             examKey="ial"
-            subjectsList={IAL_SUBJECTS_LIST}
             students={students}
           />
           <IELTSChart students={students} />
@@ -651,9 +717,26 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <CountryChart students={graduatedStudents} title="Students by Country — All Years" color="#14b8a6" />
           <CountryChart
-            students={latestYear ? graduatedStudents.filter(s => s.grad_year === latestYear) : []}
-            title={`Students by Country — Latest Cohort (${latestYear ?? 'N/A'})`}
+            students={activeCohortYear ? graduatedStudents.filter(s => s.grad_year === activeCohortYear) : []}
+            title={`Students by Country — ${activeCohortYear === latestYearWithData ? 'Latest Cohort' : 'Cohort'} (${activeCohortYear ?? 'N/A'})`}
             color="#6366f1"
+            headerExtra={
+              cohortYears.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedCohortYear}
+                    onChange={(e) => setSelectedCohortYear(e.target.value)}
+                    className="appearance-none text-[10px] font-black uppercase text-slateBlue-800 bg-slateBlue-100 border border-transparent hover:border-gray-200 rounded px-2.5 py-1 pr-6 focus:outline-none focus:ring-2 focus:ring-aura-teal/20 cursor-pointer"
+                  >
+                    <option value="auto">Auto (Latest)</option>
+                    {cohortYears.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={10} className="absolute right-1.5 top-1.5 text-gray-400 pointer-events-none" />
+                </div>
+              )
+            }
           />
         </div>
       </div>

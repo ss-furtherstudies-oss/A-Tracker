@@ -20,8 +20,8 @@ const ResolveUniversitiesModal = ({ isOpen, onClose, unmappedNames, onResolve })
     u.university.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleMapToExisting = (qsName) => {
-    onResolve(currentUnmapped, qsName);
+  const handleMapToExisting = async (qsName) => {
+    await onResolve(currentUnmapped, qsName);
     nextStep();
   };
 
@@ -34,7 +34,7 @@ const ResolveUniversitiesModal = ({ isOpen, onClose, unmappedNames, onResolve })
       subject: ''
     };
     await updateQSData([newUni]);
-    onResolve(currentUnmapped, currentUnmapped); // mapped to itself
+    await onResolve(currentUnmapped, currentUnmapped); // mapped to itself
     nextStep();
   };
 

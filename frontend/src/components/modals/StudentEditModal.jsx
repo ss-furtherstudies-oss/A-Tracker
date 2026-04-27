@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Save, GraduationCap, BookOpen, Layers, Award, User, Calendar, Smartphone, Link as LinkIcon, Image as ImageIcon, Search } from 'lucide-react';
+import { X, Plus, Trash2, Save, GraduationCap, BookOpen, Layers, Award, User, Calendar, Smartphone, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import classNames from 'classnames';
-import { useQS } from '../../context/QSContext';
 import { IGCSE_SUBJECTS, IAS_SUBJECTS, IAL_SUBJECTS, IGCSE_BOARDS, IAS_BOARDS, IAL_BOARDS, SUBJECT_FULL_NAMES } from '../../constants/subjects';
 
-const AcademicSection = ({ title, boards, subjectsMap, data, icon: Icon, onUpdate, defaultBoard }) => {
+const AcademicSection = ({ title, boards, subjectsMap, data, icon: Icon, onUpdate, defaultBoard, separatorConfig = {} }) => {
   const addRow = () => {
     onUpdate([...data, { board: defaultBoard || boards[0], subject: '', grade: '', value: '' }]);
   };
@@ -47,6 +46,7 @@ const AcademicSection = ({ title, boards, subjectsMap, data, icon: Icon, onUpdat
 
         {data.map((row, idx) => {
           const availableSubjects = subjectsMap[row.board] || [];
+          const separatorIndex = separatorConfig[row.board];
           return (
             <div key={idx} className="grid grid-cols-12 gap-3 items-center group">
               <div className="col-span-3">
@@ -75,10 +75,17 @@ const AcademicSection = ({ title, boards, subjectsMap, data, icon: Icon, onUpdat
                     className="w-full h-10 px-3 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 transition-all appearance-none outline-none truncate text-slateBlue-800"
                   >
                     <option value="">Choose Subject...</option>
-                    {availableSubjects.map(s => (
-                      <option key={s} value={s}>
-                        {SUBJECT_FULL_NAMES[s] ? `${SUBJECT_FULL_NAMES[s]} (${s})` : s}
-                      </option>
+                    {availableSubjects.map((s, i) => (
+                      <React.Fragment key={s}>
+                        {separatorIndex === i && (
+                          <option value={`__sep_${row.board}_${i}`} disabled>
+                            ------
+                          </option>
+                        )}
+                        <option value={s}>
+                          {SUBJECT_FULL_NAMES[s] ? `${SUBJECT_FULL_NAMES[s]} (${s})` : s}
+                        </option>
+                      </React.Fragment>
                     ))}
                   </select>
                 )}
@@ -121,12 +128,19 @@ const AcademicSection = ({ title, boards, subjectsMap, data, icon: Icon, onUpdat
 };
 
 const StudentEditModal = ({ student, onClose, onSave }) => {
+  const getSafeDate = (dateVal) => {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  };
+
   const [formData, setFormData] = useState({
     name_en: student?.name_en || student?.person?.name_en || '',
     name_zh: student?.name_zh || student?.person?.name_zh || '',
     other_name: student?.other_name || student?.person?.other_name || '',
     gender: student?.gender || student?.person?.gender || 'MALE',
-    dob: (student?.dob || student?.person?.dob) ? new Date(student.dob || student.person.dob).toISOString().split('T')[0] : '',
+    dob: getSafeDate(student?.dob || student?.person?.dob),
     phone: student?.phone || student?.person?.phone || '',
     social_media: student?.social_media || student?.person?.social_media_urls?.ig || '',
     profile_picture: student?.profile_picture || student?.person?.profile_picture || '',
@@ -137,19 +151,11 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
     ias: student?.academicData?.ias?.length > 0 ? student.academicData.ias : Array.from({ length: 5 }, () => ({ board: 'Pearson Edexcel', subject: '', grade: '', value: '' })),
     ial: student?.academicData?.ial?.length > 0 ? student.academicData.ial : Array.from({ length: 5 }, () => ({ board: 'Pearson Edexcel', subject: '', grade: '', value: '' })),
     ielts: student?.academicData?.ielts || { reading: '', writing: '', listening: '', speaking: '', overall: '' },
-    university_dest: student?.university_dest || '',
-    program_dest: student?.program_dest || ''
+    status: student?.status || 'ENROLLED'
   });
 
   const [saveError, setSaveError] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  const { findUniversityByName, overallData } = useQS();
-  const [showUniSuggestions, setShowUniSuggestions] = useState(false);
-
-  const filteredUnis = overallData.filter(u => 
-    u.university.toLowerCase().includes(formData.university_dest.toLowerCase())
-  ).slice(0, 5);
 
   const handleUpdate = (field, val) => {
     setFormData(prev => ({ ...prev, [field]: val }));
@@ -356,58 +362,20 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
                   </label>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
-
-          {/* Destination Section */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-slateBlue-800 flex items-center gap-2 text-sm"><GraduationCap size={16} className="text-aura-teal"/> University Destination</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1 relative">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Target University</label>
-                <div className="relative group">
-                   <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                   <input
-                     type="text"
-                     value={formData.university_dest}
-                     onChange={(e) => {
-                       handleUpdate('university_dest', e.target.value);
-                       setShowUniSuggestions(true);
-                     }}
-                     onFocus={() => setShowUniSuggestions(true)}
-                     className="w-full pl-10 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 shadow-sm"
-                     placeholder="Search QS Rankings..."
-                   />
-                </div>
-                {showUniSuggestions && formData.university_dest && filteredUnis.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                    {filteredUnis.map(u => (
-                      <button
-                        key={u.id || u.university}
-                        className="w-full text-left px-4 py-2 text-sm font-semibold hover:bg-slateBlue-50 transition-colors border-b border-gray-50 last:border-0"
-                        onClick={() => {
-                          handleUpdate('university_dest', u.university);
-                          setShowUniSuggestions(false);
-                        }}
-                      >
-                        {u.university} {u.rank_latest && <span className="float-right text-[10px] text-gray-400">QS #{u.rank_latest}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Target Program</label>
-                <input
-                  type="text"
-                  value={formData.program_dest}
-                  onChange={(e) => handleUpdate('program_dest', e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 shadow-sm"
-                  placeholder="e.g. BEng Computer Science"
-                />
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Enrollment Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleUpdate('status', e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 appearance-none shadow-sm"
+                >
+                  <option value="APPLICANT">Applicant</option>
+                  <option value="ENROLLED">Enrolled / Studying</option>
+                  <option value="GRADUATED">Graduated</option>
+                  <option value="ALUMNI">Alumni / Graduated</option>
+                  <option value="WITHDRAWN">Withdrawn</option>
+                </select>
               </div>
             </div>
           </div>
@@ -423,6 +391,7 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
               data={formData.igcse} 
               icon={BookOpen}
               defaultBoard="CIE"
+              separatorConfig={{ CIE: 11, "Pearson Edexcel": 2 }}
               onUpdate={(val) => handleUpdate('igcse', val)}
             />
 
@@ -486,16 +455,6 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
               setSaveError(null);
               setIsSaving(true);
               try {
-                // Final check before saving
-                const uni = String(formData.university_dest || '').trim();
-                const skippedNames = ['withdrawn', 'others', 'other', '-'];
-
-                if (uni && !skippedNames.includes(uni.toLowerCase())) {
-                  const u = findUniversityByName(uni);
-                  if (u && uni !== u.university) {
-                    formData.university_dest = u.university;
-                  }
-                }
                 const result = await onSave(formData);
                 if (result?.success === false) {
                    setSaveError(result.error);

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import * as db from '../lib/supabaseService';
 
 const QSContext = createContext();
 
@@ -8,6 +8,15 @@ const normalize = (str) => {
   return str.toLowerCase()
     .replace(/university of|university|college|institute|of|the/g, '')
     .replace(/[^a-z0-9]/g, '');
+};
+
+const buildNameVariants = (name) => {
+  const upper = String(name || '').toUpperCase().trim();
+  if (!upper) return [];
+  const noParen = upper.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const noLeadingThe = upper.replace(/^THE\s+/, '').trim();
+  const noParenNoThe = noParen.replace(/^THE\s+/, '').trim();
+  return Array.from(new Set([upper, noParen, noLeadingThe, noParenNoThe].filter(Boolean)));
 };
 
 const levenshtein = (a, b) => {
@@ -45,15 +54,10 @@ export const QSProvider = ({ children }) => {
   const initQSData = async () => {
     setLoading(true);
     try {
-      const { data: rankData } = await supabase
-        .from('qs_rankings')
-        .select('*')
-        .order('rank_latest', { ascending: true });
+      const { data: rankData } = await db.fetchQSRankings();
       setOverallData(rankData || []);
 
-      const { data: mapData } = await supabase
-        .from('university_mappings')
-        .select('original_name, resolved_name');
+      const { data: mapData } = await db.fetchUniversityMappings();
       
       const mappingObj = {};
       mapData?.forEach(m => {
@@ -76,12 +80,7 @@ export const QSProvider = ({ children }) => {
     setCustomMappings(prev => ({ ...prev, [cleanOriginal]: cleanResolved }));
 
     try {
-      await supabase
-        .from('university_mappings')
-        .upsert({ 
-          original_name: cleanOriginal, 
-          resolved_name: cleanResolved 
-        }, { onConflict: 'original_name' });
+      await db.upsertUniversityMapping(cleanOriginal, cleanResolved);
     } catch (err) {
       console.error("Failed to persist mapping:", err);
     }
@@ -94,11 +93,13 @@ export const QSProvider = ({ children }) => {
 
     overallData.forEach(u => {
       const upper = u.university.toUpperCase().trim();
-      exactMap.set(upper, u);
+      buildNameVariants(upper).forEach((variant) => {
+        exactMap.set(variant, u);
+        const norm = normalize(variant);
+        if (norm.length > 3 && !normalizedMap.has(norm)) normalizedMap.set(norm, u);
+      });
       const acroMatch = upper.match(/\((.*?)\)/);
       if (acroMatch) acronymMap.set(acroMatch[1].trim(), u);
-      const norm = normalize(upper);
-      if (norm.length > 3) normalizedMap.set(norm, u);
     });
 
     return { exactMap, acronymMap, normalizedMap };
@@ -117,9 +118,11 @@ export const QSProvider = ({ children }) => {
 
     const { exactMap, acronymMap, normalizedMap } = lookupMaps;
     
-    const mappedName = customMappings[cleanName];
+    const mappedName =
+      buildNameVariants(cleanName).map((k) => customMappings[k]).find(Boolean) || null;
     if (mappedName) {
-      const match = exactMap.get(mappedName);
+      const match =
+        buildNameVariants(mappedName).map((k) => exactMap.get(k)).find(Boolean) || null;
       if (match) {
         lookupCache.set(cleanName, match);
         return match;
@@ -162,9 +165,11 @@ export const QSProvider = ({ children }) => {
 
     if (cleanName === 'TBC') return null;
 
-    const mappedName = customMappings[cleanName];
+    const mappedName =
+      buildNameVariants(cleanName).map((k) => customMappings[k]).find(Boolean) || null;
     if (mappedName) {
-      const match = lookupMaps.exactMap.get(mappedName);
+      const match =
+        buildNameVariants(mappedName).map((k) => lookupMaps.exactMap.get(k)).find(Boolean) || null;
       if (match) return match.rank_latest ?? 'N.A.';
       return 'N.A.';
     }
@@ -176,9 +181,7 @@ export const QSProvider = ({ children }) => {
 
   const updateQSData = async (newData) => {
     try {
-      const { error } = await supabase
-        .from('qs_rankings')
-        .upsert(newData, { onConflict: 'university' });
+      const { error } = await db.upsertQSRankings(newData);
       
       if (error) throw error;
       

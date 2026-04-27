@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useStudents } from '../context/StudentContext';
 import { useQS } from '../context/QSContext';
-import { IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST } from '../constants/subjects';
+import { getChartSubjectOptions, doesSubjectMatchChartOption } from '../constants/subjects';
 
 // ─── Constants & Utils ───────────────────────────────────────────────────────
 const FIELD_KEYWORDS = {
@@ -49,20 +49,14 @@ const inferCountry = (uniName) => {
   return 'Inter-disciplinary';
 };
 
-const LETTER_GRADES = ['A*', 'A', 'B', 'C', 'D', 'E', 'U'];
+const IGCSE_LETTER_GRADES = ['A*', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
+const ALEVEL_LETTER_GRADES = ['A*', 'A', 'B', 'C', 'D', 'E', 'U'];
 const IELTS_BANDS = ['9.0', '8.5', '8.0', '7.5', '7.0', '6.5', '<6.5'];
 const IELTS_COMPONENTS = ['overall', 'reading', 'writing', 'listening', 'speaking'];
 
-const mapIGCSEToLetter = (grade) => {
-  if (!grade) return 'U';
-  const g = String(grade).toUpperCase().trim();
-  if (['9', '8', 'A*'].includes(g)) return 'A*';
-  if (g === '7' || g === 'A') return 'A';
-  if (g === '6' || g === 'B') return 'B';
-  if (['5', '4', 'C'].includes(g)) return 'C';
-  if (g === '3' || g === 'D') return 'D';
-  if (['2', '1', 'E', 'F', 'G'].includes(g)) return 'E';
-  return 'U';
+const normalizeIGCSEGrade = (grade) => {
+  const g = String(grade || '').toUpperCase().trim();
+  return IGCSE_LETTER_GRADES.includes(g) ? g : '';
 };
 
 // ─── Visual Components ───────────────────────────────────────────────────────
@@ -270,14 +264,17 @@ const Statistics = () => {
       if (type === 'ielts') return cohort.some(s => s.academicData?.ielts?.[ieltsComp]);
       return cohort.some(s => {
         const exams = s.academicData?.[type] || [];
-        return subject === 'Overall' ? exams.length > 0 : exams.some(e => e.subject === subject);
+        return subject === 'Overall'
+          ? exams.length > 0
+          : exams.some(e => doesSubjectMatchChartOption(type, subject, e.subject));
       });
     });
   };
 
   const getGradeYearData = (type, subject) => {
+    const gradeScale = type === 'igcse' ? IGCSE_LETTER_GRADES : ALEVEL_LETTER_GRADES;
     const visibleYears = getVisibleYears(type, subject);
-    const rows = LETTER_GRADES.map(grade => {
+    const rows = gradeScale.map(grade => {
       const row = { grade };
       let anyDataAcrossYears = false;
       visibleYears.forEach(year => {
@@ -287,11 +284,13 @@ const Statistics = () => {
         let hasData = false;
 
         cohort.forEach(s => {
-          const exams = (s.academicData?.[type] || []).filter(e => subject === 'Overall' || e.subject === subject);
+          const exams = (s.academicData?.[type] || []).filter(
+            e => subject === 'Overall' || doesSubjectMatchChartOption(type, subject, e.subject)
+          );
           if (exams.length > 0) hasData = true;
           exams.forEach(e => {
             totalCount++;
-            const g = type === 'igcse' ? mapIGCSEToLetter(e.grade) : e.grade?.toUpperCase().trim();
+            const g = type === 'igcse' ? normalizeIGCSEGrade(e.grade) : e.grade?.toUpperCase().trim();
             if (g === grade) gradeCount++;
           });
         });
@@ -364,7 +363,7 @@ const Statistics = () => {
       visibleYears.forEach(year => {
         const cohort = students.filter(s => s.grad_year === year);
         const studentCounts = cohort.map(s => (s.academicData?.[type] || []).filter(m => {
-          const g = type === 'igcse' ? mapIGCSEToLetter(m.grade) : m.grade?.toUpperCase().trim();
+          const g = type === 'igcse' ? normalizeIGCSEGrade(m.grade) : m.grade?.toUpperCase().trim();
           return g === letter;
         }).length);
         
@@ -550,13 +549,13 @@ const Statistics = () => {
 
       {activeTab === 'academic' && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <Card title={t('stats.academic.igcse')} icon={Award} headerBg="bg-aura-teal/10" headerExtra={<Select options={[{value:'Overall',label:'Overall IGCSE'}, ...IGCSE_SUBJECTS_LIST.map(s=>({value:s,label:s}))]} value={subIGCSE} onChange={setSubIGCSE} />}>
+          <Card title={t('stats.academic.igcse')} icon={Award} headerBg="bg-aura-teal/10" headerExtra={<Select options={[{ value: 'Overall', label: 'Overall IGCSE' }, ...getChartSubjectOptions('igcse')]} value={subIGCSE} onChange={setSubIGCSE} />}>
             <StatsTable {...igcseData} />
           </Card>
-          <Card title={t('stats.academic.ias')} icon={Award} headerBg="bg-blue-50" headerExtra={<Select options={[{value:'Overall',label:'Overall IAS'}, ...IAS_SUBJECTS_LIST.map(s=>({value:s,label:s}))]} value={subIAS} onChange={setSubIAS} />}>
+          <Card title={t('stats.academic.ias')} icon={Award} headerBg="bg-blue-50" headerExtra={<Select options={[{ value: 'Overall', label: 'Overall IAS' }, ...getChartSubjectOptions('ias')]} value={subIAS} onChange={setSubIAS} />}>
             <StatsTable {...iasData} />
           </Card>
-          <Card title={t('stats.academic.ial')} icon={Award} headerBg="bg-purple-50" headerExtra={<Select options={[{value:'Overall',label:'Overall IAL'}, ...IAL_SUBJECTS_LIST.map(s=>({value:s,label:s}))]} value={subIAL} onChange={setSubIAL} />}>
+          <Card title={t('stats.academic.ial')} icon={Award} headerBg="bg-purple-50" headerExtra={<Select options={[{ value: 'Overall', label: 'Overall IAL' }, ...getChartSubjectOptions('ial')]} value={subIAL} onChange={setSubIAL} />}>
             <StatsTable {...ialData} />
           </Card>
           <Card title={t('stats.academic.ielts')} icon={TrendingUp} headerBg="bg-orange-50" headerExtra={<Select options={IELTS_COMPONENTS.map(c=>({value:c,label:c}))} value={ieltsComp} onChange={setIeltsComp} />}>

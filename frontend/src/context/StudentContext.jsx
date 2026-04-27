@@ -1,31 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import * as db from '../lib/supabaseService';
 
 const StudentContext = createContext();
-
-export const generateSummary = (gradesArr) => {
-  if (!gradesArr || gradesArr.length === 0) return '-';
-  const counts = {};
-  gradesArr.forEach(item => {
-    const g = item.grade?.toUpperCase().trim();
-    if (g) counts[g] = (counts[g] || 0) + 1;
-  });
-  if (Object.keys(counts).length === 0) return '-';
-
-  return Object.keys(counts).sort((a, b) => {
-    const aIsNum = !isNaN(a) && a.trim() !== '';
-    const bIsNum = !isNaN(b) && b.trim() !== '';
-    if (aIsNum && bIsNum) return Number(b) - Number(a);
-    if (!aIsNum && bIsNum) return -1;
-    if (aIsNum && !bIsNum) return 1;
-    if (a === 'A*') return -1;
-    if (b === 'A*') return 1;
-    return a.localeCompare(b);
-  }).map(g => {
-    const isNum = !isNaN(g) && g.trim() !== '';
-    return isNum ? `${counts[g]}x${g}` : `${counts[g]}${g}`;
-  }).join(', ');
-};
 
 export const StudentProvider = ({ children }) => {
   const [students, setStudents] = useState([]);
@@ -41,20 +17,11 @@ export const StudentProvider = ({ children }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Students
-      const { data: studentsData, error: sError } = await supabase
-        .from('students')
-        .select('*')
-        .order('grad_year', { ascending: false });
-
+      const { data: studentsData, error: sError } = await db.fetchStudents();
       if (sError) throw sError;
       setStudents(studentsData || []);
 
-      // 2. Fetch Applications
-      const { data: appsData, error: aError } = await supabase
-        .from('applications')
-        .select('*');
-
+      const { data: appsData, error: aError } = await db.fetchApplications();
       if (aError) throw aError;
       setUappData(appsData || []);
     } catch (err) {
@@ -65,25 +32,13 @@ export const StudentProvider = ({ children }) => {
   };
 
   // ─── Cloud Sync Helpers ──────────────────────────────────────────────────
-  
-  // Update a single application in Supabase
+
   const updateApplication = async (studentId, appId, updates) => {
     try {
-      const { error } = await supabase
-        .from('applications')
-        .update(updates)
-        .eq('id', appId);
-      
+      const { error } = await db.updateApplicationById(appId, updates);
       if (error) throw error;
-      
-      // Update local state
-      setUappData(prev => prev.map(s => {
-        if (s.id !== studentId) return s;
-        return {
-          ...s,
-          applications: s.applications.map(a => a.id === appId ? { ...a, ...updates } : a)
-        };
-      }));
+
+      setUappData(prev => prev.map(app => (app.id === appId ? { ...app, ...updates } : app)));
       setLastModified(Date.now());
       return { success: true };
     } catch (err) {
@@ -92,30 +47,12 @@ export const StudentProvider = ({ children }) => {
     }
   };
 
-  // Add multiple applications to Supabase (used in batch import)
   const addApplications = async (newApps) => {
     try {
-      const { data, error } = await supabase
-        .from('applications')
-        .insert(newApps)
-        .select();
-      
+      const { data, error } = await db.insertApplications(newApps);
       if (error) throw error;
-      
-      // Update local state
-      setUappData(prev => {
-        const next = [...prev];
-        data.forEach(app => {
-          const sIdx = next.findIndex(s => s.id === app.student_id);
-          if (sIdx > -1) {
-            next[sIdx] = {
-              ...next[sIdx],
-              applications: [...(next[sIdx].applications || []), app]
-            };
-          }
-        });
-        return next;
-      });
+
+      setUappData(prev => [...prev, ...(data || [])]);
       setLastModified(Date.now());
       return { success: true };
     } catch (err) {
@@ -133,34 +70,26 @@ export const StudentProvider = ({ children }) => {
         uappMap.set(app.student_id, {
           university_dest: app.university || '',
           program_dest: app.program || '',
+          quali: app.quali || '',
         });
       }
     });
     return students.map(s => ({
       ...s,
-      university_dest: uappMap.get(s.id)?.university_dest || s.university_dest || '',
-      program_dest: uappMap.get(s.id)?.program_dest || s.program_dest || '',
+      university_dest: uappMap.get(s.id)?.university_dest ?? s.university_dest ?? '',
+      program_dest: uappMap.get(s.id)?.program_dest ?? s.program_dest ?? '',
+      quali: uappMap.get(s.id)?.quali ?? s.quali ?? '',
     }));
   }, [students, uappData]);
-
-  // Wrapper to update students locally (upsert to Supabase should be done per-component)
-  const updateStudents = async (newStudents) => {
-    setStudents(newStudents);
-    setLastModified(Date.now());
-  };
 
   // Upsert multiple students to Supabase
   const upsertStudents = async (studentDataArray) => {
     try {
-      const { data: result, error } = await supabase
-        .from('students')
-        .upsert(studentDataArray, { onConflict: 'student_num' })
-        .select();
-
+      const { data: result, error } = await db.upsertStudents(studentDataArray);
       if (error) throw error;
-      
-      // Update local state by merging or refreshing
-      await fetchData(); 
+
+      // Refresh all data to keep local state in sync
+      await fetchData();
       return { success: true, data: result };
     } catch (err) {
       console.error("Failed to upsert students:", err.message);
@@ -171,18 +100,29 @@ export const StudentProvider = ({ children }) => {
   // Delete a student from Supabase
   const deleteStudent = async (id) => {
     try {
-      const { error } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await db.deleteStudentById(id);
       if (error) throw error;
-      
+
       setStudents(prev => prev.filter(s => s.id !== id));
       setLastModified(Date.now());
       return { success: true };
     } catch (err) {
       console.error("Failed to delete student:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Delete an application from Supabase
+  const deleteApplication = async (studentId, appId) => {
+    try {
+      const { error } = await db.deleteApplicationById(appId);
+      if (error) throw error;
+
+      setUappData(prev => prev.filter(a => a.id !== appId));
+      setLastModified(Date.now());
+      return { success: true };
+    } catch (err) {
+      console.error("Failed to delete application:", err.message);
       return { success: false, error: err.message };
     }
   };
@@ -196,17 +136,18 @@ export const StudentProvider = ({ children }) => {
   };
 
   return (
-    <StudentContext.Provider value={{ 
-      students: studentsWithDestinations, 
+    <StudentContext.Provider value={{
+      students: studentsWithDestinations,
       upsertStudents,
       deleteStudent,
-      uappData, 
-      setUappData: setUappDataDirect, 
+      uappData,
+      setUappData: setUappDataDirect,
       updateApplication,
       addApplications,
+      deleteApplication,
       loading,
       refreshData: fetchData,
-      lastModified 
+      lastModified
     }}>
       {children}
     </StudentContext.Provider>
