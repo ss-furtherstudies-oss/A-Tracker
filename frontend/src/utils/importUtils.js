@@ -92,21 +92,21 @@ export const normalizeSubjectForImport = (examLevel, board, rawSubject) => {
   const subjectVal = String(rawSubject || '').replace(/_/g, ' ').trim();
   const boardSubjects = SUBJECT_MAP_BY_EXAM[examLevel]?.[boardVal] || [];
   const subjectToken = normalizeToken(subjectVal);
-  if (!subjectToken) return { board: boardVal, subject: '' };
+  if (!subjectToken) return { board: boardVal, subject: '', isMatch: false };
 
   const directMatch = boardSubjects.find((s) => normalizeToken(s) === subjectToken);
-  if (directMatch) return { board: boardVal, subject: directMatch };
+  if (directMatch) return { board: boardVal, subject: directMatch, isMatch: true };
 
   const aliasKey = SUBJECT_ALIAS_MAP[subjectToken] || subjectToken;
   const canonical = SUBJECT_CANONICAL_MAP[examLevel]?.[aliasKey]?.[boardVal];
   if (canonical && boardSubjects.includes(canonical)) {
-    return { board: boardVal, subject: canonical };
+    return { board: boardVal, subject: canonical, isMatch: true };
   }
 
   const prefixMatch = boardSubjects.find(
     (s) => normalizeToken(s).startsWith(subjectToken) || subjectToken.startsWith(normalizeToken(s))
   );
-  if (prefixMatch) return { board: boardVal, subject: prefixMatch };
+  if (prefixMatch) return { board: boardVal, subject: prefixMatch, isMatch: true };
 
-  return { board: 'Other', subject: subjectVal };
+  return { board: boardVal, subject: subjectVal, isMatch: false };
 };

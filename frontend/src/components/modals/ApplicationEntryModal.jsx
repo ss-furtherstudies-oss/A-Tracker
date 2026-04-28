@@ -30,6 +30,9 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
     university: '',
     program: '',
     qualification: '',
+    has_offer: false,
+    condition: '',
+    decision: '',
     is_final: false
   });
   
@@ -42,6 +45,11 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
         university: initialApplication.university || '',
         program: initialApplication.program || '',
         qualification: initialApplication.quali || '',
+        has_offer:
+          initialApplication.has_offer === true ||
+          String(initialApplication.status || '').toUpperCase() === 'OFFER',
+        condition: initialApplication.condition || '',
+        decision: initialApplication.decision || '',
         is_final: initialApplication.is_final || false
       });
       setUniSearch(initialApplication.university || '');
@@ -51,6 +59,9 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
         university: '',
         program: '',
         qualification: '',
+        has_offer: false,
+        condition: '',
+        decision: '',
         is_final: false
       });
       setUniSearch('');
@@ -110,7 +121,6 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
 
   const handleSave = async () => {
     const finalUniversity = formData.university || uniSearch;
-    const isExistingOffer = initialApplication?.has_offer === true || String(initialApplication?.status || '').toUpperCase() === 'OFFER';
     
     if (!selectedStudent || !finalUniversity || !formData.location) {
       alert("Please fill in all required fields (Location, University).");
@@ -132,9 +142,11 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
         university: finalUniversity,
         program: formData.program,
         quali: formData.qualification,
+        condition: formData.condition,
+        decision: formData.decision,
         is_final: formData.is_final,
-        has_offer: isExistingOffer,
-        status: isExistingOffer ? 'OFFER' : 'PENDING'
+        has_offer: formData.has_offer,
+        status: formData.has_offer ? 'OFFER' : 'PENDING'
       };
       
       if (isEdit) entry.id = initialApplication.id;
@@ -380,6 +392,43 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
                 <datalist id="qualification-suggestions">
                   {QUALIFICATION_SUGGESTIONS.map(s => <option key={s} value={s} />)}
                 </datalist>
+              </div>
+            </div>
+
+            {/* Offer / Conditions / Decision */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Offer Type</label>
+                <select
+                  value={formData.has_offer ? 'Y' : 'N'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, has_offer: e.target.value === 'Y' }))}
+                  className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 appearance-none shadow-sm"
+                >
+                  <option value="N">No Offer</option>
+                  <option value="Y">Offer</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Conditions</label>
+                <input
+                  type="text"
+                  value={formData.condition}
+                  onChange={(e) => setFormData(prev => ({ ...prev, condition: e.target.value }))}
+                  placeholder="e.g. AAB incl. Maths"
+                  className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 shadow-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">Decision</label>
+                <input
+                  type="text"
+                  value={formData.decision}
+                  onChange={(e) => setFormData(prev => ({ ...prev, decision: e.target.value }))}
+                  placeholder="e.g. Accepted"
+                  className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 shadow-sm"
+                />
               </div>
             </div>
 

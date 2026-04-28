@@ -403,7 +403,19 @@ const Statistics = () => {
       if (!map[uni]) map[uni] = { name: uni, total: 0, rank: findRankByName(uni) || 'N/A' };
       map[uni].total++;
     });
-    const finalData = Object.values(map).sort((a,b) => b.total - a.total);
+    
+    let finalData = Object.values(map);
+    
+    // Separate 'withdrawn' from the rest
+    const mainList = finalData.filter(d => d.name.toLowerCase() !== 'withdrawn');
+    const withdrawnList = finalData.filter(d => d.name.toLowerCase() === 'withdrawn');
+
+    // Sort main list by total descending
+    mainList.sort((a, b) => b.total - a.total);
+
+    // Recombine with withdrawn at the bottom
+    finalData = [...mainList, ...withdrawnList];
+
     if (finalData.length > 0) {
       const totalCount = finalData.reduce((acc, curr) => acc + curr.total, 0);
       finalData.push({ 

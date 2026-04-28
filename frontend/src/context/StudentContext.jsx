@@ -127,6 +127,19 @@ export const StudentProvider = ({ children }) => {
     }
   };
 
+  const clearAllApplications = async () => {
+    try {
+      const { error } = await db.clearAllApplications();
+      if (error) throw error;
+      setUappData([]);
+      setLastModified(Date.now());
+      return { success: true };
+    } catch (err) {
+      console.error("Failed to clear applications:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
   const setUappDataDirect = (updater) => {
     setUappData(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -145,6 +158,7 @@ export const StudentProvider = ({ children }) => {
       updateApplication,
       addApplications,
       deleteApplication,
+      clearAllApplications,
       loading,
       refreshData: fetchData,
       lastModified

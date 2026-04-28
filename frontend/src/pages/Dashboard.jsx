@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useStudents } from '../context/StudentContext';
 import { getChartSubjectOptions, doesSubjectMatchChartOption } from '../constants/subjects';
+import { WorldMap } from '../components/WorldMap';
 
 // ─── Grade ordering & colors ────────────────────────────────────────────────
 const LETTER_GRADES = ['U', 'E', 'D', 'C', 'B', 'A', 'A*'];
@@ -620,23 +621,23 @@ const Dashboard = () => {
     return { graduated, enrolled, total, years };
   }, [students]);
 
+  const graduatedStudents = useMemo(() => students.filter(s => {
+    const dest = String(s.university_dest || '').trim().toLowerCase();
+    return s.status !== 'WITHDRAWN' && dest && dest !== '-' && dest !== 'tbc' && dest !== 'pending' && dest !== 'unknown';
+  }), [students]);
+
   const fieldData = useMemo(() => {
     const map = {};
-    students.forEach(s => {
+    graduatedStudents.forEach(s => {
       const field = classifyProgram(s.program_dest);
       map[field] = (map[field] || 0) + 1;
     });
     return Object.entries(map)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [students]);
+  }, [graduatedStudents]);
 
   const totalFieldStudents = useMemo(() => fieldData.reduce((a, b) => a + b.value, 0), [fieldData]);
-
-  const graduatedStudents = useMemo(() => students.filter(s => {
-    const dest = String(s.university_dest || '').trim().toLowerCase();
-    return s.status !== 'WITHDRAWN' && dest && dest !== '-' && dest !== 'tbc' && dest !== 'pending' && dest !== 'unknown';
-  }), [students]);
 
   const cohortYears = useMemo(() => {
     const years = [...new Set(graduatedStudents.map(s => s.grad_year))].filter(Boolean).sort((a, b) => b - a);
@@ -649,6 +650,19 @@ const Dashboard = () => {
     if (selectedCohortYear === 'auto') return latestYearWithData;
     return parseInt(selectedCohortYear);
   }, [selectedCohortYear, latestYearWithData]);
+
+  const mapData = useMemo(() => {
+    return graduatedStudents.map(s => {
+      const c = inferCountry(s.university_dest);
+      return { 
+        name: s.name_en || s.person?.name_en || s.student_num || 'Unknown', 
+        country: c, 
+        uni: s.university_dest || '-',
+        program: s.program_dest || '-',
+        year: s.grad_year || 'Unknown'
+      };
+    }).filter(m => m.country && m.country !== 'Other');
+  }, [graduatedStudents]);
 
   return (
     <div className="space-y-6">
@@ -739,6 +753,14 @@ const Dashboard = () => {
             }
           />
         </div>
+      </div>
+
+      {/* ── Global Student Distribution (Interactive Map) ── */}
+      <div>
+        <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 px-1">Global Student Distribution</h2>
+        <Card title="Interactive Map" icon={Globe} className="p-5">
+           <WorldMap students={mapData} />
+        </Card>
       </div>
 
       {/* ── Field of Study Pie ── */}

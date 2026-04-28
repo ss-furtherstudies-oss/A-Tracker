@@ -28,7 +28,7 @@ const isTruthyCell = (value) => {
 };
 const normalizeUniKey = (value) => String(value ?? '').trim().toUpperCase();
 
-const EditableCell = ({ value, onSave, className = '' }) => {
+const EditableCell = ({ value, onSave, className = '', readOnly = false }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
 
@@ -60,15 +60,26 @@ const EditableCell = ({ value, onSave, className = '' }) => {
 
   return (
     <div
-      onClick={() => setIsEditing(true)}
-      className={`cursor-pointer hover:bg-slateBlue-50 rounded px-1 -mx-1 transition-colors min-h-[1.5em] ${className}`}
+      onClick={() => {
+        if (!readOnly) setIsEditing(true);
+      }}
+      className={`${readOnly ? '' : 'cursor-pointer hover:bg-slateBlue-50'} rounded px-1 -mx-1 transition-colors min-h-[1.5em] ${className}`}
     >
       {value || '-'}
     </div>
   );
 };
 
-const CollapsibleRow = ({ student, index, onToggleFinal, onUpdateApp, onDeleteApp, onEditApp, onAddApp }) => {
+const CollapsibleRow = ({
+  student,
+  index,
+  onToggleFinal,
+  onUpdateApp,
+  onDeleteApp,
+  onEditApp,
+  onAddApp,
+  canEdit
+}) => {
   const { findRankByName } = useQS();
   const [expanded, setExpanded] = useState(false);
   const isAlumni = Number(student.grad_year) < new Date().getFullYear();
@@ -111,25 +122,27 @@ const CollapsibleRow = ({ student, index, onToggleFinal, onUpdateApp, onDeleteAp
           </div>
         </td>
         <td className="px-2 py-2 text-center">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddApp(student);
-            }}
-            title="Add Application"
-            className="p-1.5 rounded-lg text-aura-teal hover:bg-aura-teal/10 opacity-0 group-hover:opacity-100 transition-all"
-          >
-            <Plus size={14} />
-          </button>
+          {canEdit ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddApp(student);
+              }}
+              title="Add Application"
+              className="p-1.5 rounded-lg text-aura-teal hover:bg-aura-teal/10 opacity-0 group-hover:opacity-100 transition-all"
+            >
+              <Plus size={14} />
+            </button>
+          ) : null}
         </td>
       </tr>
 
       {expanded && (
         <tr className="bg-gray-50/80 border-b border-gray-200">
           <td colSpan="9" className="p-0 border-l-4 border-aura-teal">
-            <div className="p-4 pl-10 overflow-x-auto">
+            <div className="p-4 pl-10 overflow-auto max-h-[55vh]">
               <table className="w-full text-left text-xs bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden table-fixed">
-                <thead className="bg-slateBlue-100/30 text-gray-500 uppercase font-black text-[10px] tracking-widest border-b border-gray-100">
+                <thead className="sticky top-0 z-20 bg-slateBlue-100/95 backdrop-blur-sm text-gray-500 uppercase font-black text-[10px] tracking-widest border-b border-gray-100">
                   <tr>
                     <th className="p-3 w-14">Loc</th>
                     <th className="p-3 w-48">University</th>
@@ -148,10 +161,10 @@ const CollapsibleRow = ({ student, index, onToggleFinal, onUpdateApp, onDeleteAp
                   {student.applications.map((app) => (
                     <tr key={app.id} className="hover:bg-slateBlue-50/40 transition-colors">
                       <td className="p-3 font-bold text-gray-500">
-                        <EditableCell value={app.country} onSave={(v) => onUpdateApp(student.id, app.id, 'country', v)} />
+                        <EditableCell value={app.country} onSave={(v) => onUpdateApp(student.id, app.id, 'country', v)} readOnly={!canEdit} />
                       </td>
                       <td className="p-3 font-bold text-slateBlue-700">
-                        <EditableCell value={app.university} onSave={(v) => onUpdateApp(student.id, app.id, 'university', v)} />
+                        <EditableCell value={app.university} onSave={(v) => onUpdateApp(student.id, app.id, 'university', v)} readOnly={!canEdit} />
                       </td>
                       <td className="p-3 text-center text-[15px] font-bold text-gray-400">
                         {(() => {
@@ -164,13 +177,13 @@ const CollapsibleRow = ({ student, index, onToggleFinal, onUpdateApp, onDeleteAp
                         })()}
                       </td>
                       <td className="p-3 text-gray-600">
-                        <EditableCell value={app.program} onSave={(v) => onUpdateApp(student.id, app.id, 'program', v)} />
+                        <EditableCell value={app.program} onSave={(v) => onUpdateApp(student.id, app.id, 'program', v)} readOnly={!canEdit} />
                       </td>
                       <td className="p-3 text-gray-500 font-semibold">{app.quali || '-'}</td>
                       <td className="p-3 text-center">{app.has_offer ? <Check size={16} className="text-emerald-500 mx-auto" strokeWidth={3} /> : '-'}</td>
                       <td className="p-3 text-gray-600 font-bold whitespace-nowrap">{isAlumni ? '-' : student.as_grades || '-'}</td>
                       <td className="p-3 text-gray-500">
-                        <EditableCell value={app.condition} onSave={(v) => onUpdateApp(student.id, app.id, 'condition', v)} />
+                        <EditableCell value={app.condition} onSave={(v) => onUpdateApp(student.id, app.id, 'condition', v)} readOnly={!canEdit} />
                       </td>
                       <td className="p-3 font-semibold text-slateBlue-800">{app.decision || '-'}</td>
                       <td className="p-3 text-center">
@@ -179,39 +192,42 @@ const CollapsibleRow = ({ student, index, onToggleFinal, onUpdateApp, onDeleteAp
                             e.stopPropagation();
                             onToggleFinal(student.id, app.id);
                           }}
+                          disabled={!canEdit}
                           className={`w-5 h-5 rounded flex items-center justify-center border mx-auto transition-colors ${
                             app.is_final
                               ? 'bg-aura-teal border-aura-teal text-white'
                               : 'border-gray-300 hover:border-aura-teal'
-                          }`}
+                          } ${canEdit ? '' : 'cursor-not-allowed opacity-50'}`}
                           title="Toggle final destination"
                         >
                           {app.is_final ? <Check size={14} strokeWidth={3} /> : null}
                         </button>
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEditApp(student, app);
-                            }}
-                            className="p-1.5 text-slateBlue-400 hover:text-slateBlue-800 hover:bg-slateBlue-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteApp(student.id, app.id);
-                            }}
-                            className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        {canEdit ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditApp(student, app);
+                              }}
+                              className="p-1.5 text-slateBlue-400 hover:text-slateBlue-800 hover:bg-slateBlue-50 rounded-lg transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteApp(student.id, app.id);
+                              }}
+                              className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -235,8 +251,25 @@ const UAppGrid = () => {
     updateApplication,
     addApplications,
     deleteApplication,
+    clearAllApplications,
     refreshData
   } = useStudents();
+
+  const handleClearAll = async () => {
+    if (
+      window.confirm(
+        'Are you sure you want to delete ALL application data? This action cannot be undone.'
+      )
+    ) {
+      const result = await clearAllApplications();
+      if (result?.success) {
+        showToast('success', 'All application data has been cleared.');
+        await refreshData();
+      } else {
+        showToast('error', `Clear data failed: ${result?.error || 'Unknown error'}`);
+      }
+    }
+  };
 
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -254,6 +287,7 @@ const UAppGrid = () => {
   const [conflictIndex, setConflictIndex] = useState(0);
   const [isMergingAllConflicts, setIsMergingAllConflicts] = useState(false);
   const importInputRef = useRef(null);
+  const canEditApplications = role === 'ADMIN';
 
   const data = useMemo(() => {
     const appsByStudent = new Map();
@@ -275,9 +309,9 @@ const UAppGrid = () => {
           name_zh: s.name_zh || s.person?.name_zh || '',
           other_name: s.other_name || s.person?.other_name || ''
         },
-        final_dest_uni: finalApp?.university || s.university_dest || '',
-        final_dest_prog: finalApp?.program || s.program_dest || '',
-        final_dest_cond: finalApp?.condition || s.final_dest_cond || '',
+        final_dest_uni: finalApp?.university || '',
+        final_dest_prog: finalApp?.program || '',
+        final_dest_cond: finalApp?.condition || '',
         last_update: s.updated_at || '',
         as_grades: s.ias_score || '',
         applications: apps
@@ -300,6 +334,7 @@ const UAppGrid = () => {
         const inName = `${s.person.name_en} ${s.person.name_zh}`.toLowerCase().includes(term);
         const inId = String(s.student_num || '').toLowerCase().includes(term);
         const inApps = s.applications.some((a) => {
+          if (filterFinalOnly && !a.is_final) return false;
           const u = String(a.university || '').toLowerCase();
           const p = String(a.program || '').toLowerCase();
           return u.includes(term) || p.includes(term);
@@ -315,6 +350,10 @@ const UAppGrid = () => {
   const showToast = (type, text) => {
     setImportMsg({ type, text });
     setTimeout(() => setImportMsg(null), 4000);
+  };
+
+  const denyEdit = () => {
+    showToast('error', 'You do not have permission to modify application records.');
   };
 
   const executeExport = (type, targetYear) => {
@@ -376,7 +415,28 @@ const UAppGrid = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     XLSX.utils.book_append_sheet(wb, ws, 'U-App Data');
-    XLSX.writeFile(wb, filename);
+    
+    try {
+      // Keep parity with other exports in the app for stable browser filename handling.
+      XLSX.writeFile(wb, filename);
+    } catch (err) {
+      // Fallback for environments where writeFile is blocked.
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Delay revoke so browser can finish binding the download.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      console.warn('U-App export used Blob fallback:', err);
+    }
+
     setExportModal({ isOpen: false, type: null });
   };
 
@@ -424,8 +484,46 @@ const UAppGrid = () => {
 
       for (const [sid, imported] of studentMap.entries()) {
         const existing = sharedStudents.find((s) => s.student_num === sid);
-        if (existing) conflicts.push({ existing, imported });
-        else newStudents.push(imported);
+        if (!existing) {
+          newStudents.push(imported);
+          continue;
+        }
+
+        const existingApps = uappData.filter((a) => a.student_id === existing.id);
+        const existingUniKeys = new Set(
+          existingApps
+            .map((a) => normalizeUniKey(a.university))
+            .filter(Boolean)
+        );
+        const seenImportUniKeys = new Set();
+        const newApps = [];
+        const duplicateApps = [];
+
+        imported.applications.forEach((app) => {
+          const uniKey = normalizeUniKey(app.university);
+          if (!uniKey) {
+            newApps.push(app);
+            return;
+          }
+
+          if (seenImportUniKeys.has(uniKey) || existingUniKeys.has(uniKey)) {
+            duplicateApps.push(app);
+            return;
+          }
+
+          seenImportUniKeys.add(uniKey);
+          newApps.push(app);
+        });
+
+        conflicts.push({
+          existing,
+          imported,
+          newApps,
+          duplicateApps,
+          duplicateUniversities: Array.from(
+            new Set(duplicateApps.map((a) => String(a.university || '').trim()).filter(Boolean))
+          )
+        });
       }
 
       for (const student of newStudents) {
@@ -545,14 +643,33 @@ const UAppGrid = () => {
     if (!pendingImport) return;
     try {
       const conflict = pendingImport.conflicts[conflictIndex];
-      const apps = conflict.imported.applications.map((a) => ({ ...a, student_id: conflict.existing.id }));
+      const baseApps = conflict.newApps || conflict.imported.applications || [];
+      const apps = baseApps.map((a) => ({ ...a, student_id: conflict.existing.id }));
       if (apps.length > 0) {
         const result = await addApplications(apps);
         if (!result?.success) throw new Error(result?.error || 'Failed to merge application data.');
       }
+      if ((conflict.duplicateApps || []).length > 0) {
+        showToast('warn', `Skipped ${conflict.duplicateApps.length} duplicated application(s) by university name.`);
+      }
       await advanceConflict();
     } catch (err) {
       showToast('error', `Merge failed: ${err.message}`);
+    }
+  };
+
+  const handleConflictImportAll = async () => {
+    if (!pendingImport) return;
+    try {
+      const conflict = pendingImport.conflicts[conflictIndex];
+      const apps = (conflict.imported.applications || []).map((a) => ({ ...a, student_id: conflict.existing.id }));
+      if (apps.length > 0) {
+        const result = await addApplications(apps);
+        if (!result?.success) throw new Error(result?.error || 'Failed to import duplicate applications.');
+      }
+      await advanceConflict();
+    } catch (err) {
+      showToast('error', `Import all failed: ${err.message}`);
     }
   };
 
@@ -566,20 +683,23 @@ const UAppGrid = () => {
     try {
       const remainingConflicts = pendingImport.conflicts.slice(conflictIndex);
       let insertedApps = 0;
+      let skippedDuplicates = 0;
       for (const conflict of remainingConflicts) {
-        const apps = conflict.imported.applications.map((a) => ({ ...a, student_id: conflict.existing.id }));
+        const baseApps = conflict.newApps || conflict.imported.applications || [];
+        const apps = baseApps.map((a) => ({ ...a, student_id: conflict.existing.id }));
         if (apps.length > 0) {
           const result = await addApplications(apps);
           if (!result?.success) throw new Error(result?.error || 'Failed to merge application data.');
           insertedApps += apps.length;
         }
+        skippedDuplicates += (conflict.duplicateApps || []).length;
       }
       setPendingImport(null);
       setConflictIndex(0);
       await refreshData();
       showToast(
         'success',
-        `Import complete. Merged ${remainingConflicts.length} conflict${remainingConflicts.length === 1 ? '' : 's'} and inserted ${insertedApps} application${insertedApps === 1 ? '' : 's'}.`
+        `Import complete. Merged ${remainingConflicts.length} conflict${remainingConflicts.length === 1 ? '' : 's'}, inserted ${insertedApps} application${insertedApps === 1 ? '' : 's'}, skipped ${skippedDuplicates} duplicated application${skippedDuplicates === 1 ? '' : 's'}.`
       );
     } catch (err) {
       showToast('error', `Merge all failed: ${err.message}`);
@@ -589,6 +709,10 @@ const UAppGrid = () => {
   };
 
   const handleUpdateAppField = async (studentId, appId, field, value) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return;
+    }
     const result = await updateApplication(studentId, appId, { [field]: value });
     if (!result?.success) {
       showToast('error', `Update failed: ${result?.error || 'Unknown error'}`);
@@ -596,6 +720,10 @@ const UAppGrid = () => {
   };
 
   const handleToggleFinal = async (studentId, appId) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return;
+    }
     try {
       const student = data.find((s) => s.id === studentId);
       if (!student) return;
@@ -629,25 +757,57 @@ const UAppGrid = () => {
   };
 
   const handleAddEntry = (student = null) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return;
+    }
     setSelectedStudentForEntry(student);
     setEditingEntry(null);
     setIsEntryModalOpen(true);
   };
 
   const handleEditEntry = (student, app) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return;
+    }
     setSelectedStudentForEntry(student);
     setEditingEntry(app);
     setIsEntryModalOpen(true);
   };
 
   const handleDeleteEntry = async (studentId, appId) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return;
+    }
     if (!window.confirm('Delete this application?')) return;
-    await deleteApplication(studentId, appId);
-    await refreshData();
-    showToast('success', 'Application deleted.');
+    try {
+      const student = data.find((s) => s.id === studentId);
+      const targetApp = student?.applications?.find((a) => a.id === appId);
+      const result = await deleteApplication(studentId, appId);
+      if (!result?.success) throw new Error(result?.error || 'Delete failed.');
+
+      // Keep student destination fields consistent when removing a final destination app.
+      if (targetApp?.is_final) {
+        const { error } = await db.updateStudentById(studentId, {
+          university_dest: null,
+          program_dest: null,
+          quali: null
+        });
+        if (error) throw error;
+      }
+      showToast('success', 'Application deleted.');
+    } catch (err) {
+      showToast('error', `Delete failed: ${err.message}`);
+    }
   };
 
   const handleSaveEntry = async (entry) => {
+    if (!canEditApplications) {
+      denyEdit();
+      return false;
+    }
     try {
       if (entry.is_final) {
         const apps = uappData.filter((a) => a.student_id === entry.student_id && a.id !== entry.id && a.is_final);
@@ -700,20 +860,25 @@ const UAppGrid = () => {
               <ChevronDown size={14} className="absolute right-3 top-3 text-gray-500 pointer-events-none" />
             </div>
 
-            <div className="relative w-full sm:w-72 group">
+            <div className="relative w-full sm:w-80 group">
               <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
               <input
                 type="text"
                 placeholder="Search names, ID, university, program..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-10 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
+                className="pl-10 pr-24 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
               />
-              {searchTerm ? (
-                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors">
-                  <X size={16} />
-                </button>
-              ) : null}
+              <div className="absolute right-3 top-2 flex items-center gap-2">
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="p-1 text-gray-400 hover:text-aura-teal transition-colors">
+                    <X size={14} />
+                  </button>
+                )}
+                <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
+                  {filteredData.length} results
+                </span>
+              </div>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 whitespace-nowrap">
@@ -758,6 +923,13 @@ const UAppGrid = () => {
               </button>
               <input ref={importInputRef} type="file" accept=".xlsx,.xls" onChange={handleImportXL} className="hidden" />
 
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-red-500 bg-red-50/50 rounded-super hover:bg-red-100 transition-all border border-red-100 shadow-sm active:scale-95 ml-2"
+                title="Remove All U-App Data"
+              >
+                <Trash2 size={14} /> CLEAR DATA
+              </button>
             </div>
           ) : null}
         </div>
@@ -785,6 +957,8 @@ const UAppGrid = () => {
           const c = pendingImport.conflicts[conflictIndex];
           const ex = c.existing;
           const im = c.imported;
+          const duplicateApps = c.duplicateApps || [];
+          const newApps = c.newApps || im.applications || [];
           return (
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
               <div className="bg-white rounded-[1.5rem] shadow-2xl border border-gray-100 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -812,10 +986,30 @@ const UAppGrid = () => {
                     <div className="font-semibold text-slateBlue-800">{im.grad_year || '-'}</div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="font-bold text-gray-500">New Applications</div>
+                    <div className="font-bold text-gray-500">Imported Applications</div>
                     <div className="font-semibold text-slateBlue-800">-</div>
                     <div className="font-semibold text-slateBlue-800">{im.applications.length}</div>
                   </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="font-bold text-gray-500">Non-duplicate Apps</div>
+                    <div className="font-semibold text-slateBlue-800">-</div>
+                    <div className="font-semibold text-emerald-700">{newApps.length}</div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="font-bold text-gray-500">Duplicate by University</div>
+                    <div className="font-semibold text-slateBlue-800">-</div>
+                    <div className="font-semibold text-amber-700">{duplicateApps.length}</div>
+                  </div>
+                  {duplicateApps.length > 0 ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide">
+                        University conflict needs your decision
+                      </p>
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        Duplicate universities found: {(c.duplicateUniversities || []).join(', ')}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="p-6 flex items-center justify-between bg-gray-50/50 border-t border-gray-100">
                   <button
@@ -838,8 +1032,17 @@ const UAppGrid = () => {
                       disabled={isMergingAllConflicts}
                       className="px-6 py-2.5 text-sm font-bold text-white bg-aura-teal rounded-super hover:opacity-90 transition-all shadow-lg shadow-aura-teal/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Merge Applications
+                      Merge Non-Duplicates
                     </button>
+                    {duplicateApps.length > 0 ? (
+                      <button
+                        onClick={handleConflictImportAll}
+                        disabled={isMergingAllConflicts}
+                        className="px-6 py-2.5 text-sm font-bold text-white bg-amber-500 rounded-super hover:opacity-90 transition-all shadow-lg shadow-amber-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Import All (Keep Duplicates)
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -882,6 +1085,7 @@ const UAppGrid = () => {
                     onDeleteApp={handleDeleteEntry}
                     onEditApp={handleEditEntry}
                     onAddApp={handleAddEntry}
+                    canEdit={canEditApplications}
                   />
                 ))
               ) : (

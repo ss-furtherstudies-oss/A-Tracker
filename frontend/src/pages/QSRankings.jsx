@@ -406,23 +406,28 @@ const QSRankings = () => {
             )}
 
             {/* Search */}
-            <div className="relative w-full sm:w-64 group">
+            <div className="relative w-full sm:w-80 group">
               <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
               <input
                 type="text"
                 placeholder="Search university, location..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-8 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
+                className="pl-9 pr-24 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100/50 transition-all font-medium"
               />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
-                >
-                  <X size={14} strokeWidth={3} />
-                </button>
-              )}
+              <div className="absolute right-3 top-2 flex items-center gap-2">
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="p-1 text-gray-400 hover:text-aura-teal transition-colors"
+                  >
+                    <X size={14} strokeWidth={3} />
+                  </button>
+                )}
+                <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
+                  {filteredData.length} results
+                </span>
+              </div>
             </div>
           </div>
 

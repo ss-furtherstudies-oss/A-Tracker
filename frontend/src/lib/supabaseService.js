@@ -47,8 +47,29 @@ export const clearAllApplications = () =>
 
 // ─── QS Rankings ────────────────────────────────────────────────────────────
 
-export const fetchQSRankings = () =>
-  supabase.from('qs_rankings').select('*').order('rank_latest', { ascending: true });
+export const fetchQSRankings = async () => {
+  const pageSize = 1000;
+  let from = 0;
+  let allRows = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('qs_rankings')
+      .select('*')
+      .order('rank_latest', { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) return { data: null, error };
+
+    const chunk = data || [];
+    allRows = allRows.concat(chunk);
+
+    if (chunk.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return { data: allRows, error: null };
+};
 
 export const upsertQSRankings = (rows) =>
   supabase.from('qs_rankings').upsert(rows, { onConflict: 'university' });

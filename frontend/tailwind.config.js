@@ -17,7 +17,8 @@ export default {
           100: '#f1f5f9', // Morandi grayish-blue background
           200: '#e2e8f0',
           800: '#1e293b',
-        }
+        },
+        'interact-blue': '#2563eb', // New interactive blue color
       },
       borderRadius: {
         'super': '2.5rem', // Super-Ellipses requirement

@@ -3,6 +3,32 @@ import { supabase } from '../lib/supabaseClient';
 import * as db from '../lib/supabaseService';
 
 const AuthContext = createContext();
+const AUTH_BOOT_TIMEOUT_MS = 4000;
+
+const resolveUserRole = async (currentUser) => {
+  if (!currentUser) return 'VIEWER';
+
+  const { data: profile, error } = await db.fetchProfileById(currentUser.id);
+
+  if (error) {
+    console.warn('Profile fetch error (table might not exist yet):', error.message);
+    return 'VIEWER';
+  }
+
+  return profile?.role || 'VIEWER';
+};
+
+const AuthLoadingScreen = () => (
+  <div className="min-h-screen bg-[#0a192f] flex items-center justify-center p-6">
+    <div className="text-center text-white">
+      <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-orange-500" />
+      <h1 className="text-2xl font-black tracking-tight">A-Tracker</h1>
+      <p className="mt-2 text-sm font-medium text-slate-300">
+        正在載入登入狀態...
+      </p>
+    </div>
+  </div>
+);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,33 +36,33 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
+    const finishLoading = () => {
+      if (active) setLoading(false);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      console.warn('Auth bootstrap timed out. Falling back to viewer mode.');
+      if (!active) return;
+      setUser(null);
+      setRole('VIEWER');
+      setLoading(false);
+    }, AUTH_BOOT_TIMEOUT_MS);
+
     // Check active sessions and sets the user
     const getSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const currentUser = session?.user ?? null;
+        if (!active) return;
         setUser(currentUser);
-        
-        if (currentUser) {
-          // Fallback: hardcoded admin email
-          if (currentUser.email === 'ss-furtherstudies@hkbuas.edu.hk') {
-            setRole('ADMIN');
-          } else {
-            // Fetch role from public.profiles with error handling
-            const { data: profile, error } = await db.fetchProfileById(currentUser.id);
-            
-            if (error) {
-              console.warn("Profile fetch error (table might not exist yet):", error.message);
-              setRole('VIEWER');
-            } else {
-              setRole(profile?.role || 'VIEWER');
-            }
-          }
-        }
+        setRole(await resolveUserRole(currentUser));
       } catch (err) {
         console.error("Auth session error:", err);
+        if (active) setRole('VIEWER');
       } finally {
-        setLoading(false);
+        finishLoading();
       }
     };
 
@@ -46,31 +72,21 @@ export const AuthProvider = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         const currentUser = session?.user ?? null;
+        if (!active) return;
         setUser(currentUser);
-        
-        if (currentUser) {
-          if (currentUser.email === 'ss-furtherstudies@hkbuas.edu.hk') {
-            setRole('ADMIN');
-          } else {
-            const { data: profile, error } = await db.fetchProfileById(currentUser.id);
-            
-            if (error) {
-              setRole('VIEWER');
-            } else {
-              setRole(profile?.role || 'VIEWER');
-            }
-          }
-        } else {
-          setRole('VIEWER');
-        }
-      } catch (err) {
-        setRole('VIEWER');
+        setRole(await resolveUserRole(currentUser));
+      } catch {
+        if (active) setRole('VIEWER');
       } finally {
-        setLoading(false);
+        finishLoading();
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
@@ -96,7 +112,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <AuthLoadingScreen /> : children}
     </AuthContext.Provider>
   );
 };

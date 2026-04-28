@@ -9,12 +9,12 @@ import * as db from '../lib/supabaseService';
 
 const ScholarshipBadge = ({ type }) => {
   const map = {
-    HKSES: { icon: '👑', color: 'bg-purple-100 text-purple-700' },
-    WIRA: { icon: '🌟', color: 'bg-yellow-100 text-yellow-700' },
-    JARDINE: { icon: '💎', color: 'bg-blue-100 text-blue-700' },
-    SIR_EDWARD_YOUDE: { icon: '🏆', color: 'bg-green-100 text-green-700' },
-    STUDENT_OF_THE_YEAR: { icon: '🎉', color: 'bg-pink-100 text-pink-700' },
-    OTHER: { icon: '🏅', color: 'bg-gray-100 text-gray-700' },
+    HKSES: { icon: '??', color: 'bg-purple-100 text-purple-700' },
+    WIRA: { icon: '??', color: 'bg-yellow-100 text-yellow-700' },
+    JARDINE: { icon: '??', color: 'bg-blue-100 text-blue-700' },
+    SIR_EDWARD_YOUDE: { icon: '??', color: 'bg-green-100 text-green-700' },
+    STUDENT_OF_THE_YEAR: { icon: '??', color: 'bg-pink-100 text-pink-700' },
+    OTHER: { icon: '??', color: 'bg-gray-100 text-gray-700' },
     NONE: null
   };
   const badge = map[type];
@@ -53,7 +53,8 @@ import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesMo
 import {
   IGCSE_SUBJECTS, IAS_SUBJECTS, IAL_SUBJECTS,
   IGCSE_BOARDS, IAS_BOARDS, IAL_BOARDS,
-  IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST
+  IGCSE_SUBJECTS_LIST, IAS_SUBJECTS_LIST, IAL_SUBJECTS_LIST,
+  SUBJECT_FULL_NAMES
 } from '../constants/subjects';
 import { useStudents } from '../context/StudentContext';
 
@@ -73,15 +74,75 @@ const GradeBadge = ({ text }) => {
   else if (/[DEU]/.test(t) || /[1234]/.test(t)) color = 'text-red-800 font-black';
   else if (/\d+/.test(t)) color = 'text-slate-500 font-medium'; // Numeric grades fallback
 
-  // Format numeric grades: "1x9" -> "1 × 9"
-  const displayText = t.replace(/(\d+)x(\d+)/, '$1 × $2');
-  
+  const displayText = t.replace(/\s*[x×]\s*/g, '');
+
   return (
-    <span className={`text-[12px] whitespace-nowrap leading-none ${color}`}>
+    <span className={`text-[10px] whitespace-nowrap leading-none ${color}`}>
       {displayText}
     </span>
   );
 };
+
+const expandGrades = (scoreStr) => {
+  if (!scoreStr || scoreStr === '-') return { letters: [], numbers: [] };
+  const tokens = scoreStr.split(',').map(t => t.trim()).filter(t => !t.toUpperCase().includes('NR'));
+  const letters = [];
+  const numbers = [];
+
+  tokens.forEach(token => {
+    // Matches "3A*", "2B", "5x9", "1 x 8", "1x7", etc.
+    const match = token.match(/^(\d+)?\s*[x×]?\s*([a-zA-Z*]+|\d+)$/);
+    if (match) {
+      const count = match[1] ? parseInt(match[1]) : 1;
+      const grade = match[2];
+      
+      if (/[a-zA-Z]/.test(grade)) {
+        // Keep letters condensed (e.g. 3A*)
+        letters.push(token);
+      } else {
+        // Expand numbers (e.g. 3x7 -> 7, 7, 7)
+        for (let i = 0; i < count; i++) {
+          numbers.push(grade);
+        }
+      }
+    } else {
+       if (/[a-zA-Z]/.test(token)) letters.push(token);
+       else if (/\d/.test(token)) numbers.push(token);
+    }
+  });
+
+  return { letters, numbers };
+};
+
+const ExpandedGradeCell = React.memo(({ scoreStr }) => {
+  const { letters, numbers } = useMemo(() => expandGrades(scoreStr), [scoreStr]);
+  if (letters.length === 0 && numbers.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-0.5 items-center justify-center font-sans">
+      {letters.length > 0 && (
+        <div className="flex flex-nowrap justify-center items-center">
+          {letters.map((g, i) => (
+            <React.Fragment key={i}>
+              <GradeBadge text={g} />
+              {i < letters.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+      {numbers.length > 0 && (
+        <div className="flex flex-nowrap justify-center items-center mt-0.5">
+          {numbers.map((g, i) => (
+            <React.Fragment key={i}>
+              <GradeBadge text={g} />
+              {i < numbers.length - 1 && <span className="text-[8px] text-gray-300">,</span>}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
 
 const SortableHeader = ({ label, sortKey, config, requestSort, className = "" }) => {
   const isActive = config.key === sortKey;
@@ -111,6 +172,26 @@ const StudentsGrid = () => {
   const navigate = useNavigate();
   const { students, upsertStudents, deleteStudent, setUappData } = useStudents();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Debounce the search term to prevent sluggish typing
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Pre-calculate computed scores to avoid running generateSummary on every render
+  const processedStudents = useMemo(() => {
+    return students.map(s => ({
+      ...s,
+      computed_igcse: (s.igcse_score && s.igcse_score !== '-') ? s.igcse_score : (s.academicData?.igcse?.length > 0 ? generateSummary(s.academicData.igcse) : ''),
+      computed_ias: (s.ias_score && s.ias_score !== '-') ? s.ias_score : (s.academicData?.ias?.length > 0 ? generateSummary(s.academicData.ias) : ''),
+      computed_ial: (s.alevel_score && s.alevel_score !== '-') ? s.alevel_score : (s.academicData?.ial?.length > 0 ? generateSummary(s.academicData.ial) : ''),
+    }));
+  }, [students]);
+
   const [editingStudent, setEditingStudent] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'grad_year', direction: 'desc' });
   const [exportModal, setExportModal] = useState({ isOpen: false, type: null });
@@ -135,6 +216,7 @@ const StudentsGrid = () => {
   const [pendingImport, setPendingImport] = useState(null); // { conflicts: [], newStudents: [] }
   const [conflictIndex, setConflictIndex] = useState(0);
   const [importStats, setImportStats] = useState({ total: 0, new: 0, merged: 0, skipped: 0 });
+  const [importContext, setImportContext] = useState({ type: null, year: null });
   const [importMsg, setImportMsg] = useState(null);
 
   const handleDelete = async (id) => {
@@ -144,7 +226,7 @@ const StudentsGrid = () => {
   };
 
   const handleClearAll = async () => {
-    if (confirm("⚠️ CRITICAL WARNING\n\nThis will permanently delete ALL student records AND university application data in the system.\n\nThis action cannot be undone. Continue?")) {
+    if (confirm("?? CRITICAL WARNING\n\nThis will permanently delete ALL student records AND university application data in the system.\n\nThis action cannot be undone. Continue?")) {
       await db.clearAllApplications();
       await db.clearAllStudents();
       
@@ -247,7 +329,9 @@ const StudentsGrid = () => {
 
       // IGCSE Section
       IGCSE_SUBJECTS_LIST.forEach(sub => {
-        headers.push(`IG_${sub}_board`, `IG_${sub}_grade`, `IG_${sub}_score`);
+        const fullName = SUBJECT_FULL_NAMES[sub] || '';
+        const displayLabel = fullName ? `${sub} ${fullName}` : sub;
+        headers.push(`IG_${displayLabel}_board`, `IG_${displayLabel}_grade`, `IG_${displayLabel}_score`);
       });
       for (let i = 1; i <= 5; i++) {
         headers.push(`IG_Other${i}_subject`, `IG_Other${i}_board`, `IG_Other${i}_grade`, `IG_Other${i}_score`);
@@ -255,7 +339,9 @@ const StudentsGrid = () => {
 
       // IAS Section
       IAS_SUBJECTS_LIST.forEach(sub => {
-        headers.push(`AS_${sub}_board`, `AS_${sub}_grade`, `AS_${sub}_score`);
+        const fullName = SUBJECT_FULL_NAMES[sub] || '';
+        const displayLabel = fullName ? `${sub} ${fullName}` : sub;
+        headers.push(`AS_${displayLabel}_board`, `AS_${displayLabel}_grade`, `AS_${displayLabel}_score`);
       });
       for (let i = 1; i <= 2; i++) {
         headers.push(`AS_Other${i}_subject`, `AS_Other${i}_board`, `AS_Other${i}_grade`, `AS_Other${i}_score`);
@@ -263,7 +349,9 @@ const StudentsGrid = () => {
 
       // IAL Section
       IAL_SUBJECTS_LIST.forEach(sub => {
-        headers.push(`AL_${sub}_board`, `AL_${sub}_grade`, `AL_${sub}_score`);
+        const fullName = SUBJECT_FULL_NAMES[sub] || '';
+        const displayLabel = fullName ? `${sub} ${fullName}` : sub;
+        headers.push(`AL_${displayLabel}_board`, `AL_${displayLabel}_grade`, `AL_${displayLabel}_score`);
       });
       for (let i = 1; i <= 2; i++) {
         headers.push(`AL_Other${i}_subject`, `AL_Other${i}_board`, `AL_Other${i}_grade`, `AL_Other${i}_score`);
@@ -294,7 +382,8 @@ const StudentsGrid = () => {
 
           if (h.startsWith('IG_')) {
             const parts = h.replace('IG_', '').split('_');
-            const sub = parts[0]; 
+            const fullSub = parts[0]; 
+            const sub = fullSub.split(' ')[0]; // Extract code
             const field = parts[1];
             const found = s.academicData?.igcse?.find(a => a.subject === sub);
             if (found) {
@@ -305,7 +394,8 @@ const StudentsGrid = () => {
           }
           if (h.startsWith('AS_')) {
             const parts = h.replace('AS_', '').split('_');
-            const sub = parts[0]; 
+            const fullSub = parts[0]; 
+            const sub = fullSub.split(' ')[0]; // Extract code
             const field = parts[1];
             const found = s.academicData?.ias?.find(a => a.subject === sub);
             if (found) {
@@ -316,7 +406,8 @@ const StudentsGrid = () => {
           }
           if (h.startsWith('AL_')) {
             const parts = h.replace('AL_', '').split('_');
-            const sub = parts[0]; 
+            const fullSub = parts[0]; 
+            const sub = fullSub.split(' ')[0]; // Extract code
             const field = parts[1];
             const found = s.academicData?.ial?.find(a => a.subject === sub);
             if (found) {
@@ -356,8 +447,10 @@ const StudentsGrid = () => {
           // Existing Grade Pre-fill for IGCSE/IAS/IAL
           if (h.endsWith('_board') || h.endsWith('_grade') || h.endsWith('_score')) {
             const parts = h.split('_');
-            const sub = parts[0];
-            const field = parts[1];
+            // Handle both prefixed (IG_0452 Accounting_grade) and non-prefixed (0452 Accounting_grade)
+            const fullSub = parts.length === 3 ? parts[1] : parts[0];
+            const sub = fullSub.split(' ')[0]; 
+            const field = parts.length === 3 ? parts[2] : parts[1];
             
             let source = [];
             if (type === 'IGCSE') source = s.academicData?.igcse || [];
@@ -414,7 +507,9 @@ const StudentsGrid = () => {
       }
 
       subjects.forEach(sub => {
-        headers.push(`${sub}_board`, `${sub}_grade`, `${sub}_score`);
+        const fullName = SUBJECT_FULL_NAMES[sub] || '';
+        const displayLabel = fullName ? `${sub} ${fullName}` : sub;
+        headers.push(`${displayLabel}_board`, `${displayLabel}_grade`, `${displayLabel}_score`);
       });
 
       filename = targetYear === 'All' ? `${baseName}.xlsx` : `${baseName}_${targetYear}.xlsx`;
@@ -489,6 +584,18 @@ const StudentsGrid = () => {
   const handleImportXL = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Detect type and year from filename
+    const fName = file.name.toUpperCase();
+    const detectedType = fName.includes('IGCSE') ? 'IGCSE' : 
+                         fName.includes('IAS') ? 'IAS' : 
+                         fName.includes('IAL') ? 'IAL' : 
+                         fName.includes('IELTS') ? 'IELTS' : 
+                         fName.includes('PROFILE') ? 'PROFILE' : null;
+    const yearMatch = fName.match(/20\d{2}/);
+    const detectedYear = yearMatch ? parseInt(yearMatch[0]) : null;
+    setImportContext({ type: detectedType, year: detectedYear });
+
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -524,7 +631,7 @@ const StudentsGrid = () => {
            return;
         }
 
-        processImportData(jsonData);
+        processImportData(jsonData, { type: detectedType, year: detectedYear });
       } catch (err) {
         console.error('Import error:', err);
         setImportMsg({ type: 'error', text: `Import failed: ${err.message}` });
@@ -534,7 +641,8 @@ const StudentsGrid = () => {
     e.target.value = ''; // Reset input
   };
 
-  const processImportData = async (jsonData) => {
+  const processImportData = async (jsonData, contextOverride = null) => {
+    const context = contextOverride || importContext;
     try {
       const conflicts = [];
       const newStudents = [];
@@ -618,6 +726,9 @@ const StudentsGrid = () => {
                     row[`${subjectName}_board`] || '',
                     subjectName
                   );
+                  // Skip if no prefix and not a confirmed match for this level
+                  if (!normalized.isMatch) return;
+
                   seen.add(subjectName);
                   subjects.push({
                     subject: normalized.subject,
@@ -642,9 +753,9 @@ const StudentsGrid = () => {
           return null;
         };
 
-        const ig = parseSubjectData('IG', ['IG_'], true);
-        const ia = parseSubjectData('AS', ['AS_'], true);
-        const il = parseSubjectData('AL', ['AL_'], true);
+        const ig = (context.type === null || context.type === 'IGCSE') ? parseSubjectData('IG', ['IG_'], true) : [];
+        const ia = (context.type === null || context.type === 'IAS') ? parseSubjectData('AS', ['AS_'], true) : [];
+        const il = (context.type === null || context.type === 'IAL') ? parseSubjectData('AL', ['AL_'], true) : [];
         const ieRaw = {
           reading: getVal(['reading', 'Reading']),
           writing: getVal(['writing', 'Writing']),
@@ -662,7 +773,7 @@ const StudentsGrid = () => {
           dob: getVal(['dob', 'Date of Birth']),
           phone: getVal(['phone', 'Phone Number']),
           social_media: getVal(['social_media', 'Social Media']),
-          grad_year: getVal(['grad_year', 'Grad Year']) ? parseInt(getVal(['grad_year', 'Grad Year'])) : null,
+          grad_year: getVal(['grad_year', 'Grad Year']) ? parseInt(getVal(['grad_year', 'Grad Year'])) : (context.year || null),
           status: getVal(['status']),
           university_dest: getVal(['university_dest', 'University Destination', 'University']),
           quali: getVal(['quali', 'Qualification']),
@@ -945,34 +1056,56 @@ const StudentsGrid = () => {
     }
   };
 
-  const handleResolveUniversity = (oldName, newName) => {
-    // Save to custom mappings so system learns it
-    addCustomMapping(oldName, newName);
-
+  const handleBulkResolve = async (resolutions) => {
+    let allStudentsToUpdate = [];
+    
     if (pendingPreImportData) {
-       setPendingPreImportData(prev => {
-          const newData = [...prev];
-          newData.forEach(row => {
-             if (row.university_dest === oldName) row.university_dest = newName;
-          });
-          return newData;
-       });
-    } else {
-       setStudents(prev => prev.map(s => {
-         if (s.university_dest === oldName) {
-           return { ...s, university_dest: newName };
-         }
-         return s;
-       }));
+      const updatedData = [...pendingPreImportData];
+      updatedData.forEach(row => {
+        resolutions.forEach(({ oldName, newName }) => {
+           const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
+           if (row.university_dest === oldName) row.university_dest = resolvedUniversity;
+        });
+      });
+      
+      // Learn from resolutions
+      for (const { oldName, newName } of resolutions) {
+        const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
+        if (resolvedUniversity) await addCustomMapping(oldName, resolvedUniversity);
+      }
+
+      setPendingPreImportData(null);
+      setResolvingUnies([]);
+      processImportData(updatedData, importContext);
+      return;
     }
+
+    for (const { oldName, newName } of resolutions) {
+      const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
+      if (!resolvedUniversity) continue;
+      
+      await addCustomMapping(oldName, resolvedUniversity);
+
+      const toUpdate = students
+        .filter(s => s.university_dest === oldName)
+        .map(s => ({
+          ...s,
+          university_dest: resolvedUniversity,
+          person: undefined
+        }));
+      allStudentsToUpdate = allStudentsToUpdate.concat(toUpdate);
+    }
+
+    if (allStudentsToUpdate.length > 0) {
+      await upsertStudents(allStudentsToUpdate);
+    }
+    setResolvingUnies([]);
   };
 
   const handleCloseResolveModal = () => {
      setResolvingUnies([]);
-     if (pendingPreImportData) {
-        processImportData(pendingPreImportData);
-        setPendingPreImportData(null);
-     }
+     setPendingPreImportData(null);
+     setImportContext({ type: null, year: null });
   };
 
   const requestSort = (key) => {
@@ -984,16 +1117,17 @@ const StudentsGrid = () => {
   };
 
   const filteredStudents = useMemo(() => {
-    let result = students.filter(s => {
-      const term = searchTerm.toLowerCase();
+    let result = processedStudents.filter(s => {
+      const term = debouncedSearchTerm.toLowerCase();
+      if (!term) return true;
       const matchNameEn = (s.name_en || s.person?.name_en || '').toLowerCase().includes(term);
       const matchNameZh = (s.name_zh || s.person?.name_zh || '').toLowerCase().includes(term);
       const matchGradYear = String(s.grad_year || '').includes(term);
       const matchProgram = (s.program_dest || '').toLowerCase().includes(term);
       const matchUniv = (s.university_dest || '').toLowerCase().includes(term);
-      const matchIG = (s.igcse_score || '').toLowerCase().includes(term);
-      const matchIAS = (s.ias_score || '').toLowerCase().includes(term);
-      const matchIAL = (s.alevel_score || '').toLowerCase().includes(term);
+      const matchIG = (s.computed_igcse || '').toLowerCase().includes(term);
+      const matchIAS = (s.computed_ias || '').toLowerCase().includes(term);
+      const matchIAL = (s.computed_ial || '').toLowerCase().includes(term);
       const matchIELTS = String(s.ielts_score || '').toLowerCase().includes(term);
 
       return matchNameEn || matchNameZh || matchGradYear || matchProgram || matchUniv || matchIG || matchIAS || matchIAL || matchIELTS;
@@ -1044,7 +1178,7 @@ const StudentsGrid = () => {
       result.sort((a, b) => {
         const getYear = (s) => {
           if (s.grad_year) return parseInt(s.grad_year);
-          // Fallback: extract year from student_num prefix (e.g. "20171023" → 2017)
+          // Fallback: extract year from student_num prefix (e.g. "20171023" ??2017)
           const match = String(s.student_num || '').match(/^(\d{4})/);
           return match ? parseInt(match[1]) : 0;
         };
@@ -1058,7 +1192,7 @@ const StudentsGrid = () => {
     }
 
     return result;
-  }, [students, searchTerm, sortConfig, findRankByName]);
+  }, [processedStudents, debouncedSearchTerm, sortConfig, findRankByName]);
 
   const unmappedCount = useMemo(() => {
     const unmapped = new Set();
@@ -1084,8 +1218,13 @@ const StudentsGrid = () => {
             placeholder="Search names, grades (e.g. 2A*), university..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-10 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100 transition-all font-medium"
+            className="pl-10 pr-24 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100 transition-all font-medium"
           />
+          <div className="absolute right-3 top-2.5 flex items-center gap-2 pointer-events-none">
+            <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
+              {filteredStudents.length} results
+            </span>
+          </div>
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
@@ -1173,9 +1312,9 @@ const StudentsGrid = () => {
                 </button>
                 <div className="flex items-center justify-between mr-8">
                   <div>
-                    <h2 className="text-lg font-black text-slateBlue-800">⚠️ Duplicate Student ID</h2>
+                    <h2 className="text-lg font-black text-slateBlue-800">?? Duplicate Student ID</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Conflict {conflictIndex + 1} of {pendingImport.conflicts.length} — Student ID: <span className="font-bold text-slateBlue-800">{ex.student_num}</span>
+                      Conflict {conflictIndex + 1} of {pendingImport.conflicts.length} ??Student ID: <span className="font-bold text-slateBlue-800">{ex.student_num}</span>
                     </p>
                   </div>
                   <div className="text-[11px] font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">MERGE REQUIRED?</div>
@@ -1246,7 +1385,7 @@ const StudentsGrid = () => {
                     onClick={handleConflictMerge}
                     className="px-6 py-2.5 text-sm font-bold text-white bg-indigo-500 rounded-super hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 active:scale-95"
                   >
-                    MERGE THIS →
+                    MERGE THIS ??
                   </button>
                   <button
                     onClick={handleConflictMergeAll}
@@ -1286,9 +1425,9 @@ const StudentsGrid = () => {
                 <th className="px-3 py-2.5 w-[50px] text-center">Status</th>
                 <SortableHeader label="Student ID" sortKey="student_num" config={sortConfig} requestSort={requestSort} className="w-[80px] text-center" />
                 <SortableHeader label="Name" sortKey="name" config={sortConfig} requestSort={requestSort} className="w-[200px]" />
-                <SortableHeader label="IGCSE" sortKey="igcse_score" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
-                <SortableHeader label="IAS" sortKey="ias_score" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
-                <SortableHeader label="IAL" sortKey="alevel_score" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
+                <SortableHeader label="IGCSE" sortKey="igcse_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
+                <SortableHeader label="IAS" sortKey="ias_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
+                <SortableHeader label="IAL" sortKey="alevel_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
                 <SortableHeader label="IELTS" sortKey="ielts_score" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
                 <SortableHeader label="QS" sortKey="qs" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
                 <SortableHeader label="University" sortKey="university_dest" config={sortConfig} requestSort={requestSort} className="w-[350px] min-w-[350px]" />
@@ -1326,98 +1465,14 @@ const StudentsGrid = () => {
                   </td>
 
                   {/* Academics */}
-                  <td className="px-1 py-1.5 align-middle text-center w-[50px]">
-                    <div className="flex flex-col gap-0.5 items-center justify-center font-sans">
-                      {(() => {
-                        const scoreStr = (s.igcse_score && s.igcse_score !== '-') ? s.igcse_score : (s.academicData?.igcse?.length > 0 ? generateSummary(s.academicData.igcse) : '');
-                        if (!scoreStr) return null;
-                        const tokens = scoreStr.split(',').map(t => t.trim()).filter(t => !t.toUpperCase().includes('NR'));
-                        const letters = tokens.filter(t => /[A-Z]/.test(t));
-                        const numbers = tokens.filter(t => /\d+x\d+/.test(t));
-                        return (
-                          <>
-                            <div className="flex gap-1 flex-wrap justify-center items-center">
-                              {letters.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < letters.length - 1 && <span className="text-[11px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                            <div className="flex gap-1 flex-wrap justify-center items-center mt-0.5">
-                              {numbers.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < numbers.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
+                  <td className="px-1 py-1.5 align-middle text-center w-[90px]">
+                    <ExpandedGradeCell scoreStr={s.computed_igcse} />
                   </td>
-                  <td className="px-1 py-3.5 align-middle text-center w-[50px]">
-                    <div className="flex flex-col gap-0.5 items-center justify-center font-sans">
-                      {(() => {
-                        const scoreStr = (s.ias_score && s.ias_score !== '-') ? s.ias_score : (s.academicData?.ias?.length > 0 ? generateSummary(s.academicData.ias) : '');
-                        if (!scoreStr) return null;
-                        const tokens = scoreStr.split(',').map(t => t.trim()).filter(t => !t.toUpperCase().includes('NR'));
-                        const letters = tokens.filter(t => /[A-Z]/.test(t));
-                        const numbers = tokens.filter(t => /\d+x\d+/.test(t));
-                        return (
-                          <>
-                            <div className="flex gap-1 flex-wrap justify-center items-center">
-                              {letters.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < letters.length - 1 && <span className="text-[11px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                            <div className="flex gap-1 flex-wrap justify-center items-center mt-0.5">
-                              {numbers.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < numbers.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
+                  <td className="px-1 py-3.5 align-middle text-center w-[90px]">
+                    <ExpandedGradeCell scoreStr={s.computed_ias} />
                   </td>
-                  <td className="px-1 py-3.5 align-middle text-center w-[50px]">
-                    <div className="flex flex-col gap-0.5 items-center justify-center font-sans">
-                      {(() => {
-                        const scoreStr = (s.alevel_score && s.alevel_score !== '-') ? s.alevel_score : (s.academicData?.ial?.length > 0 ? generateSummary(s.academicData.ial) : '');
-                        if (!scoreStr) return null;
-                        const tokens = scoreStr.split(',').map(t => t.trim()).filter(t => !t.toUpperCase().includes('NR'));
-                        const letters = tokens.filter(t => /[A-Z]/.test(t));
-                        const numbers = tokens.filter(t => /\d+x\d+/.test(t));
-                        return (
-                          <>
-                            <div className="flex gap-1 flex-wrap justify-center items-center">
-                              {letters.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < letters.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                            <div className="flex gap-1 flex-wrap justify-center items-center mt-0.5">
-                              {numbers.map((g, i) => (
-                                <React.Fragment key={i}>
-                                  <GradeBadge text={g} />
-                                  {i < numbers.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
-                                </React.Fragment>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
+                  <td className="px-1 py-3.5 align-middle text-center w-[90px]">
+                    <ExpandedGradeCell scoreStr={s.computed_ial} />
                   </td>
                   <td className="px-1 py-1.5 text-center font-black text-aura-teal text-[11px] align-middle w-[50px]">
                     {(s.ielts_score && s.ielts_score !== '-') ? s.ielts_score : (s.academicData?.ielts?.overall || '')}
@@ -1505,7 +1560,7 @@ const StudentsGrid = () => {
         isOpen={resolvingUnies.length > 0} 
         onClose={handleCloseResolveModal} 
         unmappedNames={resolvingUnies} 
-        onResolve={handleResolveUniversity} 
+        onResolve={handleBulkResolve} 
       />
 
       {/* Custom Edit ID Prompt Modal */}
