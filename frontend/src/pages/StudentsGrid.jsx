@@ -6,48 +6,6 @@ import * as XLSX from 'xlsx-js-style';
 import { useQS } from '../context/QSContext';
 import { useAuth } from '../context/AuthContext';
 import * as db from '../lib/supabaseService';
-
-const ScholarshipBadge = ({ type }) => {
-  const map = {
-    HKSES: { icon: '??', color: 'bg-purple-100 text-purple-700' },
-    WIRA: { icon: '??', color: 'bg-yellow-100 text-yellow-700' },
-    JARDINE: { icon: '??', color: 'bg-blue-100 text-blue-700' },
-    SIR_EDWARD_YOUDE: { icon: '??', color: 'bg-green-100 text-green-700' },
-    STUDENT_OF_THE_YEAR: { icon: '??', color: 'bg-pink-100 text-pink-700' },
-    OTHER: { icon: '??', color: 'bg-gray-100 text-gray-700' },
-    NONE: null
-  };
-  const badge = map[type];
-  if (!badge) return <span className="text-gray-300">-</span>;
-  return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-medium leading-none whitespace-nowrap ${badge.color}`} title={type}>
-      <span>{badge.icon}</span> <span>{type.replace(/_/g, ' ')}</span>
-    </span>
-  );
-};
-
-const StatusBadge = ({ status }) => {
-  const colors = {
-    APPLICANT: 'bg-slateBlue-100 text-slateBlue-800',
-    ENROLLED: 'bg-aura-teal/20 text-aura-teal',
-    GRADUATED: 'bg-serene-indigo/20 text-serene-indigo',
-    ALUMNI: 'bg-serene-indigo/20 text-serene-indigo',
-    WITHDRAWN: 'bg-red-100 text-red-700',
-  };
-  const labels = {
-    APPLICANT: 'Applicant',
-    ENROLLED: 'Studying',
-    GRADUATED: 'Grad',
-    ALUMNI: 'Grad',
-    WITHDRAWN: 'Withdrawn',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight whitespace-nowrap shadow-sm ${colors[status] || colors.APPLICANT}`} title={status}>
-      {labels[status] || status}
-    </span>
-  );
-};
-
 import StudentEditModal from '../components/modals/StudentEditModal';
 import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesModal';
 import {
@@ -57,113 +15,15 @@ import {
   SUBJECT_FULL_NAMES
 } from '../constants/subjects';
 import { useStudents } from '../context/StudentContext';
-
 import { generateSummary } from '../utils/gradeUtils';
 import { normalizeSubjectForImport } from '../utils/importUtils';
 
-const GradeBadge = ({ text }) => {
-  if (!text) return null;
-  const t = text.trim();
-  
-  // Color Logic
-  let color = 'text-gray-500';
-  if (t.includes('A*') || t.includes('9')) color = 'text-emerald-900 font-black';
-  else if (t.includes('A') || t.includes('8')) color = 'text-emerald-600 font-bold';
-  else if (t.includes('B') || t.includes('7')) color = 'text-blue-600 font-bold';
-  else if (t.includes('C') || t.includes('6') || t.includes('5')) color = 'text-amber-600 font-bold';
-  else if (/[DEU]/.test(t) || /[1234]/.test(t)) color = 'text-red-800 font-black';
-  else if (/\d+/.test(t)) color = 'text-slate-500 font-medium'; // Numeric grades fallback
-
-  const displayText = t.replace(/\s*[x×]\s*/g, '');
-
-  return (
-    <span className={`text-[10px] whitespace-nowrap leading-none ${color}`}>
-      {displayText}
-    </span>
-  );
-};
-
-const expandGrades = (scoreStr) => {
-  if (!scoreStr || scoreStr === '-') return { letters: [], numbers: [] };
-  const tokens = scoreStr.split(',').map(t => t.trim()).filter(t => !t.toUpperCase().includes('NR'));
-  const letters = [];
-  const numbers = [];
-
-  tokens.forEach(token => {
-    // Matches "3A*", "2B", "5x9", "1 x 8", "1x7", etc.
-    const match = token.match(/^(\d+)?\s*[x×]?\s*([a-zA-Z*]+|\d+)$/);
-    if (match) {
-      const count = match[1] ? parseInt(match[1]) : 1;
-      const grade = match[2];
-      
-      if (/[a-zA-Z]/.test(grade)) {
-        // Keep letters condensed (e.g. 3A*)
-        letters.push(token);
-      } else {
-        // Expand numbers (e.g. 3x7 -> 7, 7, 7)
-        for (let i = 0; i < count; i++) {
-          numbers.push(grade);
-        }
-      }
-    } else {
-       if (/[a-zA-Z]/.test(token)) letters.push(token);
-       else if (/\d/.test(token)) numbers.push(token);
-    }
-  });
-
-  return { letters, numbers };
-};
-
-const ExpandedGradeCell = React.memo(({ scoreStr }) => {
-  const { letters, numbers } = useMemo(() => expandGrades(scoreStr), [scoreStr]);
-  if (letters.length === 0 && numbers.length === 0) return null;
-
-  return (
-    <div className="flex flex-col gap-0.5 items-center justify-center font-sans">
-      {letters.length > 0 && (
-        <div className="flex flex-nowrap justify-center items-center">
-          {letters.map((g, i) => (
-            <React.Fragment key={i}>
-              <GradeBadge text={g} />
-              {i < letters.length - 1 && <span className="text-[10px] text-gray-300">,</span>}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-      {numbers.length > 0 && (
-        <div className="flex flex-nowrap justify-center items-center mt-0.5">
-          {numbers.map((g, i) => (
-            <React.Fragment key={i}>
-              <GradeBadge text={g} />
-              {i < numbers.length - 1 && <span className="text-[8px] text-gray-300">,</span>}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-});
-
-const SortableHeader = ({ label, sortKey, config, requestSort, className = "" }) => {
-  const isActive = config.key === sortKey;
-  return (
-    <th 
-      className={`px-3 py-2.5 cursor-pointer transition-colors group ${className}`}
-      onClick={() => requestSort(sortKey)}
-    >
-      <div className={`flex items-center gap-1.5 ${className.includes('text-center') ? 'justify-center' : ''}`}>
-        <span className="whitespace-nowrap">{label}</span>
-        <div className="flex flex-col">
-          {isActive ? (
-            config.direction === 'asc' ? <ChevronUp size={10} className="text-aura-teal" /> : <ChevronDown size={10} className="text-aura-teal" />
-          ) : (
-            <ArrowUpDown size={10} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
-        </div>
-      </div>
-    </th>
-  );
-};
+import { ScholarshipBadge, StatusBadge, GradeBadge, expandGrades, ExpandedGradeCell, SortableHeader } from '../components/ui/TableBadges';
+import { StudentsTable } from '../components/tables/StudentsTable';
+import { TemplateYearModal } from '../components/modals/TemplateYearModal';
+import { ImportConflictModal } from '../components/modals/ImportConflictModal';
+import { EditStudentIdModal } from '../components/modals/EditStudentIdModal';
+import { StudentsGridToolbar } from '../components/ui/StudentsGridToolbar';
 
 const StudentsGrid = () => {
   const { findRankByName, findUniversityByName, addCustomMapping } = useQS();
@@ -765,19 +625,19 @@ const StudentsGrid = () => {
         };
 
         const imported = {
-          student_num: String(getVal(['student_num', 'Student ID', 'student_id']) || ''),
-          name_en: getVal(['name_en', 'English Name']),
-          name_zh: getVal(['name_zh', 'Chinese Name']),
-          other_name: getVal(['other_name', 'Other Name']),
+          student_num: String(getVal(['student_num', 'Student ID', 'student_id']) || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 50),
+          name_en: String(getVal(['name_en', 'English Name']) || '').trim().slice(0, 100),
+          name_zh: String(getVal(['name_zh', 'Chinese Name']) || '').trim().slice(0, 100),
+          other_name: String(getVal(['other_name', 'Other Name']) || '').trim().slice(0, 100),
           gender: getVal(['gender']),
           dob: getVal(['dob', 'Date of Birth']),
-          phone: getVal(['phone', 'Phone Number']),
-          social_media: getVal(['social_media', 'Social Media']),
+          phone: String(getVal(['phone', 'Phone Number']) || '').trim().slice(0, 50),
+          social_media: String(getVal(['social_media', 'Social Media']) || '').trim().slice(0, 200),
           grad_year: getVal(['grad_year', 'Grad Year']) ? parseInt(getVal(['grad_year', 'Grad Year'])) : (context.year || null),
-          status: getVal(['status']),
-          university_dest: getVal(['university_dest', 'University Destination', 'University']),
-          quali: getVal(['quali', 'Qualification']),
-          program_dest: getVal(['program_dest', 'Program Destination', 'Program']),
+          status: String(getVal(['status']) || 'APPLICANT').trim().toUpperCase(),
+          university_dest: String(getVal(['university_dest', 'University Destination', 'University']) || '').trim().slice(0, 200),
+          quali: String(getVal(['quali', 'Qualification']) || '').trim().slice(0, 100),
+          program_dest: String(getVal(['program_dest', 'Program Destination', 'Program']) || '').trim().slice(0, 200),
           igcse_score: ig.length > 0 ? generateSummary(ig) : null,
           ias_score: ia.length > 0 ? generateSummary(ia) : null,
           alevel_score: il.length > 0 ? generateSummary(il) : null,
@@ -786,14 +646,19 @@ const StudentsGrid = () => {
           academicData: { 
             igcse: ig, ias: ia, ial: il,
             ielts: {
-              reading: ieRaw.reading || '',
-              writing: ieRaw.writing || '',
-              listening: ieRaw.listening || '',
-              speaking: ieRaw.speaking || '',
-              overall: ieRaw.overall || ''
+              reading: String(ieRaw.reading || '').trim().slice(0, 10),
+              writing: String(ieRaw.writing || '').trim().slice(0, 10),
+              listening: String(ieRaw.listening || '').trim().slice(0, 10),
+              speaking: String(ieRaw.speaking || '').trim().slice(0, 10),
+              overall: String(ieRaw.overall || '').trim().slice(0, 10)
             }
           }
         };
+
+        // Strict Validation Check
+        if (!imported.student_num || imported.student_num.length < 3) return; // Skip invalid IDs
+        if (!imported.name_en) return; // Skip without name
+
 
         const existingInDb = students.find(s => s.student_num === imported.student_num);
         
@@ -1208,197 +1073,30 @@ const StudentsGrid = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header & Controls - Sticky at top */}
-      <div className="sticky top-0 z-40 bg-[#f8fafc] pt-2 pb-1">
-        <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-t-super shadow-sm border border-gray-100 gap-4">
-        <div className="relative w-full sm:w-96 group">
-          <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
-          <input
-            type="text"
-            placeholder="Search names, grades (e.g. 2A*), university..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-24 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100 transition-all font-medium"
-          />
-          <div className="absolute right-3 top-2.5 flex items-center gap-2 pointer-events-none">
-            <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
-              {filteredStudents.length} results
-            </span>
-          </div>
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={handleCheckUnmapped}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold transition-all shadow-sm active:scale-95 border rounded-super ${
-              unmappedCount > 0 
-                ? 'bg-red-500 text-white border-red-600 hover:bg-red-600 animate-pulse-subtle' 
-                : 'bg-white text-gray-400 border-gray-100 opacity-60 hover:opacity-100'
-            }`}
-          >
-            <Globe size={14} /> 
-            RESOLVE MAPPINGS
-            {unmappedCount > 0 && <span className="ml-1 bg-white text-red-500 px-1.5 py-0.5 rounded-full text-[10px]">{unmappedCount}</span>}
-          </button>
-          {role === 'ADMIN' && (
-            <div className="relative inline-flex items-center">
-              <Download size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
-              <select
-                onChange={handleExportTemplate}
-                className="appearance-none pl-9 pr-6 py-2 text-xs font-bold text-gray-500 bg-white rounded-super hover:bg-gray-50 transition-all border border-gray-200 shadow-sm cursor-pointer outline-none active:scale-95 text-center"
-                defaultValue=""
-              >
-                <option value="" disabled>DOWNLOAD TYPE...</option>
-                <option value="FULL">FULL DATA BACKUP</option>
-                <option value="PROFILE">Profile Data Template</option>
-                <option value="IGCSE">IGCSE Grades Template</option>
-                <option value="IAS">IAS Grades Template</option>
-                <option value="IAL">IAL/GCEAL Grades Template</option>
-                <option value="IELTS">IELTS Scores Template</option>
-              </select>
-            </div>
-          )}
-
-          {role === 'ADMIN' && (
-            <label className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-500 bg-white rounded-super hover:bg-gray-50 transition-all border border-gray-200 shadow-sm cursor-pointer active:scale-95">
-              <Upload size={14} /> BATCH IMPORT
-              <input type="file" accept=".xlsx, .xls" onChange={handleImportXL} className="hidden" />
-            </label>
-          )}
-
-          {role === 'ADMIN' && (
-            <button
-              onClick={handleClearAll}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-red-500 bg-red-50/50 rounded-super hover:bg-red-100 transition-all border border-red-100 shadow-sm active:scale-95"
-              title="Remove All Data"
-            >
-              <Trash2 size={14} /> CLEAR DATA
-            </button>
-          )}
-
-          {role === 'ADMIN' && (
-            <button
-              onClick={() => setEditingStudent({})}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-aura-teal rounded-super hover:bg-teal-500 shadow-lg shadow-aura-teal/20 transition-all ml-2 active:scale-95"
-            >
-              + Add New
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-    {/* Conflict Resolution Modal */}
-      {pendingImport && pendingImport.conflicts[conflictIndex] && (() => {
-        const c = pendingImport.conflicts[conflictIndex];
-        const ex = c.existing;
-        const im = c.imported;
-        return (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[1.5rem] shadow-2xl border border-gray-100 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-orange-50 relative">
-                <button 
-                  onClick={handleCancelImport}
-                  className="absolute top-6 right-6 p-2 text-amber-400 hover:bg-amber-100/50 rounded-full transition-all"
-                >
-                  <X size={20} />
-                </button>
-                <div className="flex items-center justify-between mr-8">
-                  <div>
-                    <h2 className="text-lg font-black text-slateBlue-800">?? Duplicate Student ID</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Conflict {conflictIndex + 1} of {pendingImport.conflicts.length} ??Student ID: <span className="font-bold text-slateBlue-800">{ex.student_num}</span>
-                    </p>
-                  </div>
-                  <div className="text-[11px] font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">MERGE REQUIRED?</div>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <table className="w-full text-xs border-collapse table-fixed">
-                  <thead>
-                    <tr className="bg-slateBlue-100/30 text-gray-500 uppercase font-black text-[10px] tracking-widest text-left">
-                      <th className="p-3 w-[20%]">Field</th>
-                      <th className="p-3 w-[40%]">Existing Record</th>
-                      <th className="p-3 w-[40%]">Incoming Data</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {[
-                      ['Student ID', ex.student_num, im.student_num],
-                      ['Name (EN)', ex.name_en || ex.person?.name_en, im.name_en || im.person?.name_en],
-                      ['Name (ZH)', ex.name_zh || ex.person?.name_zh, im.name_zh || im.person?.name_zh],
-                      ['Year', ex.grad_year, im.grad_year],
-                      ['IGCSE', ex.igcse_score, im.igcse_score],
-                      ['IAS', ex.ias_score, im.ias_score],
-                      ['IAL', ex.alevel_score, im.alevel_score],
-                      ['IELTS', ex.ielts_score, im.ielts_score],
-                      ['Status', ex.status, im.status],
-                    ].filter(([_, __, imVal]) => {
-                      const isSkip = (v) => v === null || v === undefined || String(v).trim() === '' || String(v).trim() === '-';
-                      return !isSkip(imVal);
-                    }).map(([label, exVal, imVal]) => {
-                      const isDifferent = String(exVal || '').trim() !== String(imVal || '').trim();
-                      return (
-                        <tr key={label} className={isDifferent ? 'bg-amber-50/50 border-l-4 border-amber-400' : ''}>
-                          <td className="p-3 font-black text-gray-500 uppercase text-[10px] tracking-wide">{label}</td>
-                          <td className={`p-3 font-semibold ${isDifferent ? 'text-gray-400 line-through' : 'text-slateBlue-800'}`}>
-                            {exVal || '-'}
-                          </td>
-                          <td className="p-3 font-semibold text-slateBlue-800 flex items-center gap-2">
-                            {isDifferent ? (
-                              <span className="text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded shadow-sm">{imVal || '-'}</span>
-                            ) : (
-                              <span>{imVal || '-'}</span>
-                            )}
-                            {isDifferent && <span className="text-[9px] font-black text-amber-500 tracking-wider">NEW</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-                <button
-                  onClick={handleConflictSkip}
-                  className="px-6 py-2.5 text-sm font-bold text-gray-500 bg-white rounded-super border border-gray-200 hover:bg-gray-50 transition-all active:scale-95"
-                >
-                  Skip (Keep Existing)
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleConflictEditAndSave}
-                    className="px-6 py-2.5 text-sm font-bold text-slateBlue-800 bg-slateBlue-50/80 rounded-super hover:bg-slateBlue-100 transition-all shadow-sm active:scale-95 border border-slateBlue-200"
-                  >
-                    Edit ID & Save New
-                  </button>
-                  <button
-                    onClick={handleConflictMerge}
-                    className="px-6 py-2.5 text-sm font-bold text-white bg-indigo-500 rounded-super hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 active:scale-95"
-                  >
-                    MERGE THIS ??
-                  </button>
-                  <button
-                    onClick={handleConflictMergeAll}
-                    className="px-6 py-2.5 text-sm font-bold text-white bg-aura-teal rounded-super hover:opacity-90 transition-all shadow-xl shadow-aura-teal/20 active:scale-95 flex items-center gap-2 animate-pulse-subtle"
-                  >
-                    <Download size={14} /> IMPORT ALL REMAINING
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <StudentsGridToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        resultCount={filteredStudents.length}
+        onResolveMappings={handleCheckUnmapped}
+        unmappedCount={unmappedCount}
+        role={role}
+        onExportTemplate={handleExportTemplate}
+        onImportXL={handleImportXL}
+        onClearAll={handleClearAll}
+        onAddNew={() => setEditingStudent({})}
+      />
+      {pendingImport && pendingImport.conflicts[conflictIndex] && (
+        <ImportConflictModal
+          conflict={pendingImport.conflicts[conflictIndex]}
+          index={conflictIndex}
+          totalCount={pendingImport.conflicts.length}
+          onCancel={handleCancelImport}
+          onSkip={handleConflictSkip}
+          onEditId={handleConflictEditAndSave}
+          onMerge={handleConflictMerge}
+          onMergeAll={handleConflictMergeAll}
+        />
+      )}
 
       {/* Toast Notification */}
       {importMsg && (
@@ -1416,129 +1114,15 @@ const StudentsGrid = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-b-[1.5rem] shadow-sm border border-gray-100 border-t-0 overflow-hidden w-full relative">
-        <div className="overflow-auto max-h-[70vh] relative">
-          <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
-            <thead>
-              <tr className="bg-slateBlue-800 border-b border-slateBlue-900 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-30 shadow-sm transition-all">
-                <SortableHeader label="Year" sortKey="grad_year" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
-                <th className="px-3 py-2.5 w-[50px] text-center">Status</th>
-                <SortableHeader label="Student ID" sortKey="student_num" config={sortConfig} requestSort={requestSort} className="w-[80px] text-center" />
-                <SortableHeader label="Name" sortKey="name" config={sortConfig} requestSort={requestSort} className="w-[200px]" />
-                <SortableHeader label="IGCSE" sortKey="igcse_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
-                <SortableHeader label="IAS" sortKey="ias_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
-                <SortableHeader label="IAL" sortKey="alevel_score" config={sortConfig} requestSort={requestSort} className="w-[90px] text-center" />
-                <SortableHeader label="IELTS" sortKey="ielts_score" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
-                <SortableHeader label="QS" sortKey="qs" config={sortConfig} requestSort={requestSort} className="w-[50px] text-center" />
-                <SortableHeader label="University" sortKey="university_dest" config={sortConfig} requestSort={requestSort} className="w-[350px] min-w-[350px]" />
-                <th className="px-3 py-2.5 w-[50px] text-center">Quali</th>
-                <th className="px-3 py-2.5 w-[350px] min-w-[350px]">Program</th>
-                {role === 'ADMIN' && <th className="px-4 py-2.5 w-[100px] text-center sticky right-0 bg-slateBlue-800 z-30 shadow-[-4px_0_10px_rgba(0,0,0,0.3)]">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredStudents.length > 0 ? filteredStudents.map((s, idx) => (
-                <tr key={s.id || idx} className={`hover:bg-slate-100 transition-colors group divide-x divide-gray-100/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                  {/* Grad Year */}
-                  <td className="px-1 py-1.5 text-center text-gray-500 font-bold w-[50px] text-[11px]">
-                    {s.grad_year || ''}
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-1 py-3.5 w-[50px] text-center">
-                    <StatusBadge status={s.status} />
-                  </td>
-
-                  {/* Student ID */}
-                  <td className="px-1 py-1.5 w-[80px] text-center font-bold text-[11px] text-gray-500">
-                    {s.student_num || ''}
-                  </td>
-
-                  {/* Name */}
-                  <td className="px-3 py-1.5 font-bold text-slateBlue-800 w-[200px]">
-                    <div className="flex flex-col">
-                      <span className="truncate text-xs tracking-tight">
-                        {s.name_en || s.person?.name_en} {(s.other_name || s.person?.other_name) && `(${s.other_name || s.person?.other_name})`}
-                      </span>
-                      {(s.name_zh || s.person?.name_zh) && <span className="text-gray-400 text-[11px] font-semibold">{s.name_zh || s.person?.name_zh}</span>}
-                    </div>
-                  </td>
-
-                  {/* Academics */}
-                  <td className="px-1 py-1.5 align-middle text-center w-[90px]">
-                    <ExpandedGradeCell scoreStr={s.computed_igcse} />
-                  </td>
-                  <td className="px-1 py-3.5 align-middle text-center w-[90px]">
-                    <ExpandedGradeCell scoreStr={s.computed_ias} />
-                  </td>
-                  <td className="px-1 py-3.5 align-middle text-center w-[90px]">
-                    <ExpandedGradeCell scoreStr={s.computed_ial} />
-                  </td>
-                  <td className="px-1 py-1.5 text-center font-black text-aura-teal text-[11px] align-middle w-[50px]">
-                    {(s.ielts_score && s.ielts_score !== '-') ? s.ielts_score : (s.academicData?.ielts?.overall || '')}
-                  </td>
-
-                  <td className="px-1 py-1.5 text-center align-middle w-[50px]">
-                    <span className="text-[16px] font-black text-slateBlue-800">
-                      {findRankByName(s.university_dest) || ''}
-                    </span>
-                  </td>
-
-                  {/* Dest */}
-                  <td className="px-2 py-1.5 w-[350px] min-w-[350px] max-w-[350px]">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slateBlue-800 text-[11px] leading-tight break-words">{s.university_dest === '-' ? '' : s.university_dest}</span>
-                    </div>
-                  </td>
-
-                  {/* Quali */}
-                  <td className="px-1 py-1.5 text-center align-middle w-[50px]">
-                    <span className="text-[11px] font-bold text-gray-400">
-                      {s.quali === '-' ? '' : s.quali}
-                    </span>
-                  </td>
-
-                  <td className="px-2 py-1.5 w-[350px] min-w-[350px] max-w-[350px]">
-                    <span className="text-[11px] text-gray-500 font-medium break-words block">{s.program_dest === '-' ? '' : s.program_dest}</span>
-                  </td>
-
-                  {/* Actions */}
-                  {role === 'ADMIN' && (
-                    <td className={`px-2 py-1.5 w-[100px] text-center sticky right-0 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleEdit(s.id)}
-                          className="p-1 bg-indigo-50 text-serene-indigo rounded-md hover:bg-serene-indigo hover:text-white transition-all shadow-sm active:scale-90"
-                          title="Edit Profile"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(s.id)}
-                          className="p-1.5 bg-rose-50 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition-all shadow-sm active:scale-90"
-                          title="Delete Profile"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan="13" className="px-4 py-24 text-center">
-                    <div className="flex flex-col items-center text-gray-300">
-                      <FileSpreadsheet size={64} className="mb-4 opacity-10" />
-                      <p className="text-lg font-bold tracking-tight">No student records found.</p>
-                      <p className="text-sm mt-1">Try adding a new student or generating dummy data.</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <StudentsTable
+        filteredStudents={filteredStudents}
+        sortConfig={sortConfig}
+        requestSort={requestSort}
+        role={role}
+        handleEdit={handleEdit}
+        handleDelete={handleDelete}
+        findRankByName={findRankByName}
+      />
 
       {editingStudent && (
         <StudentEditModal
@@ -1563,54 +1147,15 @@ const StudentsGrid = () => {
         onResolve={handleBulkResolve} 
       />
 
-      {/* Custom Edit ID Prompt Modal */}
-      {editIdPrompt && editIdPrompt.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100">
-            <div className="p-6">
-              <h3 className="text-xl font-black text-slateBlue-800 mb-2">Assign New Student ID</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Please enter a new, unique Student ID for <strong className="text-slateBlue-800">{editIdPrompt.studentName}</strong>.
-              </p>
-              
-              <div className="space-y-1">
-                <input
-                  type="text"
-                  autoFocus
-                  defaultValue={editIdPrompt.initialValue}
-                  onChange={(e) => setEditIdPrompt(prev => ({ ...prev, errorMsg: null }))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitEditId(e.target.value);
-                  }}
-                  id="new-student-id-input"
-                  className={`w-full px-4 py-3 bg-gray-50 border ${editIdPrompt.errorMsg ? 'border-red-400 focus:ring-red-400 focus:bg-red-50' : 'border-gray-200 focus:ring-aura-teal focus:bg-white'} rounded-xl text-sm font-bold text-slateBlue-800 focus:outline-none focus:ring-2 transition-all`}
-                  placeholder="Enter unique Student ID..."
-                />
-                {editIdPrompt.errorMsg && (
-                  <p className="text-[11px] font-bold text-red-500 flex items-center gap-1 mt-2">
-                    <AlertCircle size={14} /> {editIdPrompt.errorMsg}
-                  </p>
-                )}
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-100">
-              <button
-                onClick={() => setEditIdPrompt(null)}
-                className="px-5 py-2 text-sm font-bold text-gray-500 hover:text-gray-700 bg-white border border-gray-200 transition-colors rounded-xl active:scale-95 shadow-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => submitEditId(document.getElementById('new-student-id-input').value)}
-                className="px-6 py-2 text-sm font-bold text-white bg-aura-teal rounded-xl hover:bg-teal-500 shadow-lg shadow-aura-teal/20 active:scale-95 transition-all"
-              >
-                Save Record
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EditStudentIdModal
+        isOpen={editIdPrompt?.isOpen}
+        initialValue={editIdPrompt?.initialValue}
+        studentName={editIdPrompt?.studentName}
+        errorMsg={editIdPrompt?.errorMsg}
+        onClose={() => setEditIdPrompt(null)}
+        onSave={submitEditId}
+        onErrorClear={() => setEditIdPrompt(prev => ({ ...prev, errorMsg: null }))}
+      />
       {/* Template Year Selection Modal */}
       {exportModal.isOpen && (
         <TemplateYearModal
@@ -1621,75 +1166,6 @@ const StudentsGrid = () => {
           initialBoard={selectedExportBoard}
         />
       )}
-    </div>
-  );
-};
-
-const TemplateYearModal = ({ type, onClose, onConfirm, availableYears, initialBoard }) => {
-  const [selectedYear, setSelectedYear] = useState('All');
-  const [selectedBoard, setSelectedBoard] = useState(initialBoard || '');
-
-  const isAcademic = ['IGCSE', 'IAS', 'IAL'].includes(type);
-  const boards = type === 'IGCSE' ? IGCSE_BOARDS : (type === 'IAS' ? IAS_BOARDS : IAL_BOARDS);
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100">
-        <div className="p-6">
-          <h3 className="text-xl font-black text-slateBlue-800 mb-2">Export Template</h3>
-          <p className="text-sm text-gray-500 mb-6 font-medium">
-            Configure your <strong className="text-aura-teal">{type}</strong> template download.
-          </p>
-          
-          <div className="space-y-4">
-            {/* Year Selector */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Graduation Year</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl focus:border-aura-teal focus:ring-4 focus:ring-aura-teal/10 outline-none transition-all font-bold text-slateBlue-800"
-              >
-                <option value="All">All Years (Empty Template)</option>
-                {availableYears && [...availableYears].sort((a,b) => b-a).map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Board Selector (Optional) */}
-            {isAcademic && (
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Exam Board</label>
-                <select
-                  value={selectedBoard}
-                  onChange={(e) => setSelectedBoard(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl focus:border-aura-teal focus:ring-4 focus:ring-aura-teal/10 outline-none transition-all font-bold text-slateBlue-800"
-                >
-                  {boards.filter(b => b !== 'Other').map(b => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-3 text-sm font-black text-gray-400 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all active:scale-95"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={() => onConfirm(selectedYear, selectedBoard)}
-                className="flex-1 px-4 py-3 text-sm font-black text-white bg-aura-teal rounded-xl shadow-lg shadow-aura-teal/20 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Download size={16} /> DOWNLOAD
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
