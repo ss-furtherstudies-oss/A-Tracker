@@ -13,8 +13,15 @@ const Header = () => {
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    setShowUserMenu(false); // Close menu immediately
+    try {
+      await signOut();
+      // App.jsx will automatically show LoginPage when user state becomes null
+    } catch (err) {
+      console.error('Logout failed:', err);
+      // Force reload if everything fails
+      window.location.href = '/';
+    }
   };
 
   const toggleLanguage = () => {

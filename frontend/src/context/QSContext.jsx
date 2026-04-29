@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import * as db from '../lib/supabaseService';
+import { useAuth } from './AuthContext';
 
 const QSContext = createContext();
 
@@ -47,9 +48,18 @@ export const QSProvider = ({ children }) => {
   const [customMappings, setCustomMappings] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    initQSData();
-  }, []);
+    if (user) {
+      initQSData();
+    } else {
+      setOverallData([]);
+      setSubjectData([]);
+      setCustomMappings({});
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   const initQSData = async () => {
     setLoading(true);

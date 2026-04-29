@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import * as db from '../lib/supabaseService';
+import { useAuth } from './AuthContext';
 
 const StudentContext = createContext();
 
@@ -9,10 +10,18 @@ export const StudentProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [lastModified, setLastModified] = useState(0);
 
-  // Fetch data from Supabase on mount
+  const { user } = useAuth();
+
+  // Fetch data from Supabase whenever user auth state changes
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (user) {
+      fetchData();
+    } else {
+      setStudents([]);
+      setUappData([]);
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   const fetchData = async () => {
     setLoading(true);

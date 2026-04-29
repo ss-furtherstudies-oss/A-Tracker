@@ -91,7 +91,17 @@ export const AuthProvider = ({ children }) => {
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
   const signUp = (email, password) => supabase.auth.signUp({ email, password });
-  const signOut = () => supabase.auth.signOut();
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Logout error:', err.message);
+    } finally {
+      // Force clear state to ensure UI updates even if onAuthStateChange is delayed
+      setUser(null);
+      setRole('VIEWER');
+    }
+  };
   const signInWithGoogle = () => supabase.auth.signInWithOAuth({ provider: 'google' });
   const resetPassword = (email) => supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/settings`,
