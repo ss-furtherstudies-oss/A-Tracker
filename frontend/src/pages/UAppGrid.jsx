@@ -125,26 +125,55 @@ const UAppGrid = () => {
   };
 
   const executeExport = (type, targetYear) => {
-    const headers = ['Grad Year', 'Student ID', 'Class', 'English Name', 'Chinese Name', 'Other Name', 'Country', 'University', 'Program', 'Quali', 'Offer Type', 'Conditions', 'Decision', 'Final Destination'];
-    const targetStudents = data.filter((s) => targetYear === 'All' || String(s.grad_year) === String(targetYear)).sort((a, b) => (a.person.name_en || '').localeCompare(b.person.name_en || ''));
+    // 1. Updated Headers: Removed 'Class', swapped 'Chinese Name' and 'Other Name'
+    const headers = [
+      'Grad Year', 'Student ID', 'English Name', 'Other Name', 'Chinese Name', 
+      'Country', 'University', 'Program', 'Quali', 'Offer Type', 'Conditions', 'Decision', 'Final Destination'
+    ];
+
+    // 2. Sorting: Sort by Grad Year (descending) first, then English Name (alphabetical)
+    const targetStudents = data
+      .filter((s) => targetYear === 'All' || String(s.grad_year) === String(targetYear))
+      .sort((a, b) => {
+        if (a.grad_year !== b.grad_year) return Number(b.grad_year) - Number(a.grad_year);
+        return (a.person.name_en || '').localeCompare(b.person.name_en || '');
+      });
+
     let rows = [];
     if (type === 'FULL') {
       targetStudents.forEach((s) => {
         if (s.applications.length === 0) {
-          rows.push([s.grad_year, s.student_num, '', s.person.name_en, s.person.name_zh, s.person.other_name, '', '', '', '', '', '', '', '']);
+          // Columns: Year, ID, Eng, Other, Chinese, ... (empty app fields)
+          rows.push([
+            s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
+            '', '', '', '', '', '', '', ''
+          ]);
         } else {
           s.applications.forEach((app) => {
-            rows.push([s.grad_year, s.student_num, '', s.person.name_en, s.person.name_zh, s.person.other_name, app.country || '', app.university || '', app.program || '', app.quali || '', app.has_offer ? 'Y' : 'N', app.condition || '', app.decision || '', app.is_final ? 'Y' : 'N']);
+            rows.push([
+              s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
+              app.country || '', app.university || '', app.program || '', app.quali || '', 
+              app.has_offer ? 'Y' : 'N', app.condition || '', app.decision || '', app.is_final ? 'Y' : 'N'
+            ]);
           });
         }
       });
     } else {
-      rows = targetStudents.map((s) => [s.grad_year, s.student_num, '', s.person.name_en, s.person.name_zh, s.person.other_name, '', '', '', '', '', '', '', '']);
+      // Template only: No applications
+      rows = targetStudents.map((s) => [
+        s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
+        '', '', '', '', '', '', '', ''
+      ]);
     }
+
+    // 3. Export as CSV
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     XLSX.utils.book_append_sheet(wb, ws, 'U-App Data');
-    XLSX.writeFile(wb, `${type === 'FULL' ? 'Full_UApp_Data' : 'Template_UApp'}_${targetYear}.xlsx`);
+    
+    // Using writeFile with bookType: 'csv' for automatic formatting
+    XLSX.writeFile(wb, `${type === 'FULL' ? 'Full_UApp_Data' : 'Template_UApp'}_${targetYear}.csv`, { bookType: 'csv' });
+    
     setExportModal({ isOpen: false, type: null });
   };
 
@@ -343,7 +372,7 @@ const UAppGrid = () => {
         onClearClick={handleClearAll}
         canEdit={canEditApplications}
       />
-      <input ref={importInputRef} type="file" accept=".xlsx,.xls" onChange={handleImportXL} className="hidden" />
+      <input ref={importInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportXL} className="hidden" />
 
       {importMsg && (
         <div className={`fixed top-6 right-6 z-[1000] flex items-center gap-4 px-6 py-4 rounded-2xl text-sm font-bold shadow-2xl border ${
