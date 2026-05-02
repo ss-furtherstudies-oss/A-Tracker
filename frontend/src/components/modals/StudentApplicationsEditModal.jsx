@@ -135,11 +135,13 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
           }}
           initialStudent={student}
           initialApplication={editingApp}
-          onSave={async (entry) => {
+          onSave={async (entries) => {
             if (editingApp) {
-               return await onUpdateApp(student.id, editingApp.id, entry);
+               // When editing, it only returns an array of length 1
+               return await onUpdateApp(student.id, editingApp.id, entries[0]);
             } else {
-               return await onAddApp(entry);
+               // When adding, it can be multiple entries
+               return await onAddApp(entries);
             }
           }}
         />

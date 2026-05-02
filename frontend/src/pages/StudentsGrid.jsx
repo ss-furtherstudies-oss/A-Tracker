@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Edit2, Trash2, Download, Upload, FileSpreadsheet, X, Globe, ArrowUpDown, ChevronUp, ChevronDown, Plus, AlertCircle } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -78,6 +78,7 @@ const StudentsGrid = () => {
   const [importStats, setImportStats] = useState({ total: 0, new: 0, merged: 0, skipped: 0 });
   const [importContext, setImportContext] = useState({ type: null, year: null });
   const [importMsg, setImportMsg] = useState(null);
+  const pendingDataRef = useRef(null);
 
   const handleDelete = async (id) => {
     if (confirm("Are you sure you want to delete this student profile? This will also remove their university application records.")) {
@@ -487,6 +488,7 @@ const StudentsGrid = () => {
         const unmappedArr = Array.from(unmapped);
         if (unmappedArr.length > 0) {
            setPendingPreImportData(jsonData);
+           pendingDataRef.current = jsonData;
            setResolvingUnies(unmappedArr);
            return;
         }
@@ -921,54 +923,65 @@ const StudentsGrid = () => {
     }
   };
 
-  const handleBulkResolve = async (resolutions) => {
-    let allStudentsToUpdate = [];
-    
-    if (pendingPreImportData) {
-      const updatedData = [...pendingPreImportData];
-      updatedData.forEach(row => {
-        resolutions.forEach(({ oldName, newName }) => {
-           const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
-           if (row.university_dest === oldName) row.university_dest = resolvedUniversity;
-        });
-      });
-      
-      // Learn from resolutions
-      for (const { oldName, newName } of resolutions) {
-        const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
-        if (resolvedUniversity) await addCustomMapping(oldName, resolvedUniversity);
-      }
+  const handleResolveOneRow = async (oldName, newName, action) => {
+    const resolved = action === 'ADD'
+      ? newName.trim()
+      : (findUniversityByName(newName)?.university || newName.trim());
 
-      setPendingPreImportData(null);
-      setResolvingUnies([]);
-      processImportData(updatedData, importContext);
-      return;
+    if (action === 'ADD') {
+      try {
+        const result = await Promise.race([
+          db.upsertQSRankings([{
+            university: resolved, rank_latest: null, rank_prev: null, location: '', subject: ''
+          }]),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+        ]);
+        if (result?.error) console.warn('[RESOLVE] QS upsert error:', result.error.message);
+        else console.log('[RESOLVE] QS upsert OK:', resolved);
+      } catch (err) {
+        console.warn('[RESOLVE] QS upsert failed:', err.message);
+      }
     }
 
-    for (const { oldName, newName } of resolutions) {
-      const resolvedUniversity = findUniversityByName(newName)?.university || String(newName || '').trim();
-      if (!resolvedUniversity) continue;
-      
-      await addCustomMapping(oldName, resolvedUniversity);
+    try {
+      await Promise.race([
+        addCustomMapping(oldName, resolved),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+      ]);
+      console.log('[RESOLVE] Mapping OK:', oldName, '->', resolved);
+    } catch (err) {
+      console.warn('[RESOLVE] Mapping failed:', err.message);
+    }
 
+    // Update ref directly (avoids stale state)
+    if (pendingDataRef.current) {
+      const updated = pendingDataRef.current.map(row =>
+        row.university_dest === oldName ? { ...row, university_dest: resolved } : row
+      );
+      pendingDataRef.current = updated;
+      setPendingPreImportData(updated);
+    } else {
       const toUpdate = students
         .filter(s => s.university_dest === oldName)
-        .map(s => ({
-          ...s,
-          university_dest: resolvedUniversity,
-          person: undefined
-        }));
-      allStudentsToUpdate = allStudentsToUpdate.concat(toUpdate);
+        .map(s => ({ ...s, university_dest: resolved, person: undefined }));
+      if (toUpdate.length > 0) await upsertStudents(toUpdate);
     }
+  };
 
-    if (allStudentsToUpdate.length > 0) {
-      await upsertStudents(allStudentsToUpdate);
-    }
+  const handleFinishResolve = async () => {
     setResolvingUnies([]);
+    const rows = pendingDataRef.current;
+    pendingDataRef.current = null;
+    setPendingPreImportData(null);
+    if (rows) {
+      await processImportData(rows, importContext);
+    }
+    setImportContext({ type: null, year: null });
   };
 
   const handleCloseResolveModal = () => {
      setResolvingUnies([]);
+     pendingDataRef.current = null;
      setPendingPreImportData(null);
      setImportContext({ type: null, year: null });
   };
@@ -1144,7 +1157,8 @@ const StudentsGrid = () => {
         isOpen={resolvingUnies.length > 0} 
         onClose={handleCloseResolveModal} 
         unmappedNames={resolvingUnies} 
-        onResolve={handleBulkResolve} 
+        onResolveRow={handleResolveOneRow}
+        onFinish={handleFinishResolve}
       />
 
       <EditStudentIdModal

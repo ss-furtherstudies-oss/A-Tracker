@@ -26,13 +26,17 @@ export const StudentProvider = ({ children }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: studentsData, error: sError } = await db.fetchStudents();
-      if (sError) throw sError;
-      setStudents(studentsData || []);
+      const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), ms));
+      const [studentsResult, appsResult] = await Promise.all([
+        Promise.race([db.fetchStudents(), timeout(30000)]),
+        Promise.race([db.fetchApplications(), timeout(30000)])
+      ]);
 
-      const { data: appsData, error: aError } = await db.fetchApplications();
-      if (aError) throw aError;
-      setUappData(appsData || []);
+      if (studentsResult.error) throw studentsResult.error;
+      if (appsResult.error) throw appsResult.error;
+
+      setStudents(studentsResult.data || []);
+      setUappData(appsResult.data || []);
     } catch (err) {
       console.error("Error fetching students/apps:", err.message);
     } finally {
@@ -42,9 +46,15 @@ export const StudentProvider = ({ children }) => {
 
   // ─── Cloud Sync Helpers ──────────────────────────────────────────────────
 
+  const withTimeout = (promise, ms = 30000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database request timed out. Please check RLS policies.')), ms))
+    ]);
+
   const updateApplication = async (studentId, appId, updates) => {
     try {
-      const { error } = await db.updateApplicationById(appId, updates);
+      const { error } = await withTimeout(db.updateApplicationById(appId, updates));
       if (error) throw error;
 
       setUappData(prev => prev.map(app => (app.id === appId ? { ...app, ...updates } : app)));
@@ -58,7 +68,7 @@ export const StudentProvider = ({ children }) => {
 
   const addApplications = async (newApps) => {
     try {
-      const { data, error } = await db.insertApplications(newApps);
+      const { data, error } = await withTimeout(db.insertApplications(newApps));
       if (error) throw error;
 
       setUappData(prev => [...prev, ...(data || [])]);
@@ -66,6 +76,27 @@ export const StudentProvider = ({ children }) => {
       return { success: true };
     } catch (err) {
       console.error("Failed to add applications:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const upsertApplications = async (apps) => {
+    try {
+      const { data, error } = await withTimeout(db.upsertApplications(apps));
+      if (error) throw error;
+      setUappData(prev => {
+        const next = [...prev];
+        (data || []).forEach(updatedApp => {
+          const idx = next.findIndex(a => a.id === updatedApp.id);
+          if (idx >= 0) next[idx] = updatedApp;
+          else next.push(updatedApp);
+        });
+        return next;
+      });
+      setLastModified(Date.now());
+      return { success: true, data };
+    } catch (err) {
+      console.error("Failed to upsert applications:", err.message);
       return { success: false, error: err.message };
     }
   };
@@ -94,7 +125,7 @@ export const StudentProvider = ({ children }) => {
   // Upsert multiple students to Supabase
   const upsertStudents = async (studentDataArray) => {
     try {
-      const { data: result, error } = await db.upsertStudents(studentDataArray);
+      const { data: result, error } = await withTimeout(db.upsertStudents(studentDataArray));
       if (error) throw error;
 
       // Refresh all data to keep local state in sync
@@ -109,7 +140,7 @@ export const StudentProvider = ({ children }) => {
   // Delete a student from Supabase
   const deleteStudent = async (id) => {
     try {
-      const { error } = await db.deleteStudentById(id);
+      const { error } = await withTimeout(db.deleteStudentById(id));
       if (error) throw error;
 
       setStudents(prev => prev.filter(s => s.id !== id));
@@ -124,7 +155,7 @@ export const StudentProvider = ({ children }) => {
   // Delete an application from Supabase
   const deleteApplication = async (studentId, appId) => {
     try {
-      const { error } = await db.deleteApplicationById(appId);
+      const { error } = await withTimeout(db.deleteApplicationById(appId));
       if (error) throw error;
 
       setUappData(prev => prev.filter(a => a.id !== appId));
@@ -138,7 +169,7 @@ export const StudentProvider = ({ children }) => {
 
   const clearAllApplications = async () => {
     try {
-      const { error } = await db.clearAllApplications();
+      const { error } = await withTimeout(db.clearAllApplications());
       if (error) throw error;
       setUappData([]);
       setLastModified(Date.now());
@@ -166,6 +197,7 @@ export const StudentProvider = ({ children }) => {
       setUappData: setUappDataDirect,
       updateApplication,
       addApplications,
+      upsertApplications,
       deleteApplication,
       clearAllApplications,
       loading,

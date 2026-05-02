@@ -370,10 +370,8 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
                   onChange={(e) => handleUpdate('status', e.target.value)}
                   className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-aura-teal/20 focus:border-aura-teal transition-all outline-none font-bold text-slateBlue-800 appearance-none shadow-sm"
                 >
-                  <option value="APPLICANT">Applicant</option>
-                  <option value="ENROLLED">Enrolled / Studying</option>
+                  <option value="ENROLLED">Studying</option>
                   <option value="GRADUATED">Graduated</option>
-                  <option value="ALUMNI">Alumni / Graduated</option>
                   <option value="WITHDRAWN">Withdrawn</option>
                 </select>
               </div>

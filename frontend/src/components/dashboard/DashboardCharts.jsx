@@ -167,10 +167,11 @@ export const AcademicStackChart = React.memo(({ title, examKey, students }) => {
             <XAxis dataKey="year" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${Math.min(100, val)}%`} />
             <Tooltip
+              isAnimationActive={false}
               content={(props) => <StackedTooltip {...props} isNumericGrades={isNumeric} />}
               cursor={{ fill: 'rgba(241,245,249,0.7)' }}
               offset={15}
-              allowEscapeViewBox={{ x: true, y: true }}
+              allowEscapeViewBox={{ x: false, y: true }}
               wrapperStyle={{ zIndex: 9999, pointerEvents: 'none' }}
             />
             {gradeOrder.map(g => (
@@ -240,6 +241,7 @@ export const IELTSChart = React.memo(({ students }) => {
           <XAxis dataKey="year" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(val) => `${Math.min(100, val)}%`} />
           <Tooltip 
+            isAnimationActive={false}
             content={(props) => {
               if (!props.active || !props.payload || !props.payload.length) return null;
               const items = [...props.payload].reverse();
@@ -299,6 +301,7 @@ export const CountryChart = ({ students, title, color, headerExtra }) => {
           <XAxis type="number" hide domain={[0, 'dataMax + 5']} />
           <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
           <Tooltip 
+            isAnimationActive={false}
             formatter={(val) => [`${val}%`]}
             cursor={{ fill: 'rgba(241,245,249,0.7)' }} 
           />

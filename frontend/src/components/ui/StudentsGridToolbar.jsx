@@ -16,27 +16,29 @@ export const StudentsGridToolbar = ({
   return (
     <div className="sticky top-0 z-40 bg-[#f8fafc] pt-2 pb-1">
       <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-t-super shadow-sm border border-gray-100 gap-4">
-        <div className="relative w-full sm:w-96 group">
-          <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
-          <input
-            type="text"
-            placeholder="Search names, grades (e.g. 2A*), university..."
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 pr-24 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100 transition-all font-medium"
-          />
-          <div className="absolute right-3 top-2.5 flex items-center gap-2 pointer-events-none">
-            <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-0.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
-              {resultCount} results
-            </span>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-96 group">
+            <Search size={16} className="absolute left-3 top-2.5 text-gray-400 group-focus-within:text-aura-teal transition-colors" />
+            <input
+              type="text"
+              placeholder="Search names, grades (e.g. 2A*), university..."
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-10 pr-10 py-2 w-full text-sm border border-gray-200 rounded-super focus:outline-none focus:ring-2 focus:ring-aura-teal/20 bg-slateBlue-100 transition-all font-medium"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
           {searchTerm && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-3 top-2.5 text-gray-400 hover:text-aura-teal transition-colors"
-            >
-              <X size={16} />
-            </button>
+            <span className="text-[10px] font-black text-aura-teal bg-white border border-aura-teal/20 px-2 py-1.5 rounded shadow-sm whitespace-nowrap uppercase tracking-widest">
+              {resultCount} results
+            </span>
           )}
         </div>
 

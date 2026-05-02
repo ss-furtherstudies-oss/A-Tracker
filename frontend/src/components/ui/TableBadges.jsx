@@ -29,10 +29,10 @@ export const StatusBadge = ({ status }) => {
     WITHDRAWN: 'bg-red-100 text-red-700',
   };
   const labels = {
-    APPLICANT: 'Applicant',
+    APPLICANT: 'Studying',
     ENROLLED: 'Studying',
-    GRADUATED: 'Grad',
-    ALUMNI: 'Grad',
+    GRADUATED: 'Graduated',
+    ALUMNI: 'Graduated',
     WITHDRAWN: 'Withdrawn',
   };
   return (

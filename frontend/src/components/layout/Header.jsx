@@ -43,7 +43,7 @@ const Header = () => {
   }
 
   return (
-    <header className="glass-header h-16 flex items-center justify-between px-8 sticky top-0 z-40 shadow-sm border-b border-gray-100">
+    <header className="glass-header h-16 flex items-center justify-between px-8 sticky top-0 z-50 shadow-sm border-b border-gray-100">
       <div className="flex items-center space-x-6">
         <h1 className="text-xl font-black tracking-tight bg-gradient-to-br from-aura-teal via-aura-teal to-serene-indigo bg-clip-text text-transparent drop-shadow-sm font-sans uppercase">
           {t('app.title')}
@@ -70,20 +70,6 @@ const Header = () => {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative hidden md:block w-48 group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-aura-teal transition-colors">
-            <Search size={14} />
-          </div>
-          <input
-            type="text"
-            placeholder={t('app.search')}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 pr-4 py-1.5 w-full border border-gray-200 rounded-super text-xs focus:outline-none focus:ring-2 focus:ring-aura-teal/50 bg-white transition-all shadow-sm"
-          />
-        </div>
-
         {/* User Menu Dropdown Container */}
         <div className="relative">
           <button 
@@ -100,7 +86,7 @@ const Header = () => {
               {/* Invisible backdrop to close menu */}
               <div className="fixed inset-0 z-10" onClick={() => setShowUserMenu(false)} />
               
-              <div className="absolute right-0 mt-3 w-56 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 z-20 py-2 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+              <div className="absolute right-0 mt-3 w-56 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 z-50 py-2 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
                 <div className="px-4 py-3 border-b border-gray-50 mb-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logged in as</p>
                   <p className="text-xs font-bold text-slateBlue-800 truncate">{user?.email}</p>

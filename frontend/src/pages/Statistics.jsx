@@ -6,58 +6,18 @@ import {
 import { useStudents } from '../context/StudentContext';
 import { useQS } from '../context/QSContext';
 import { getChartSubjectOptions, doesSubjectMatchChartOption } from '../constants/subjects';
+import { 
+  classifyProgram, 
+  inferCountry, 
+  normalizeIGCSEGrade, 
+  IGCSE_LETTER_GRADES 
+} from '../utils/dashboardUtils';
+import { Card } from '../components/dashboard/DashboardUI';
 
-// ─── Constants & Utils ───────────────────────────────────────────────────────
-const FIELD_KEYWORDS = {
-  'Natural Science':  ['science', 'physics', 'chemistry', 'biology', 'math', 'statistics', 'biochemistry', 'geology', 'environmental', 'computer', 'data', 'it ', 'cs', 'computing', 'biomedical', 'astronomy', 'pharmacology', 'ecology', 'natural', 'pure', 'quantitative'],
-  'Social Science':   ['social', 'psychology', 'sociology', 'political', 'geography', 'history', 'law', 'philosophy', 'media', 'communication', 'linguistics', 'education', 'english', 'anthropology', 'criminology', 'international relations', 'public policy', 'theology', 'literature'],
-  'Health Science':   ['medicine', 'medical', 'nursing', 'pharmacy', 'health', 'dental', 'physiotherapy', 'nutrition', 'food', 'veterinary', 'radiography', 'optometry', 'surgery', 'clinical'],
-  'Business':         ['business', 'bba', 'finance', 'accounting', 'management', 'marketing', 'commerce', 'economics', 'actuarial', 'entrepreneurship', 'hospitality', 'real estate', 'supply chain', 'audit', 'bank'],
-  'Engineering':      ['engineering', 'civil', 'mechanical', 'electrical', 'electronic', 'chemical engineering', 'aerospace', 'architecture', 'robotics', 'structural', 'tech'],
-  'Arts & Humanities':['art', 'design', 'music', 'film', 'drama', 'fashion', 'visual', 'creative', 'fine art', 'languages', 'translation', 'archaeology', 'classics', 'journalism', 'photography'],
-};
-
-const COUNTRY_KEYWORDS = {
-  'United Kingdom': ['oxford', 'cambridge', 'imperial', 'ucl', 'london', 'edinburgh', 'manchester', 'bristol', 'warwick', 'exeter', 'bath', 'durham', 'king', 'queen', 'nottingham', 'southampton', 'glasgow', 'st andrews', 'lse', 'goldsmiths', 'kingston'],
-  'Hong Kong SAR':  ['hong kong', 'hku', 'cuhk', 'hkust', 'polyu', 'cityu', 'lingnan', 'chu hai', 'hkbu', 'shue yan'],
-  'United States':  ['harvard', 'mit', 'stanford', 'yale', 'princeton', 'columbia', 'chicago', 'pennsylvania', 'cornell', 'university of california', 'uc ', 'ucla', 'usc', 'duke', 'johns hopkins', 'purdue', 'davis', 'san diego', 'michigan', 'northwestern', 'nyu', 'carnegie'],
-  'Australia':      ['australian', 'melbourne', 'sydney', 'queensland', 'monash', 'unsw', 'anu', 'uwa', 'adelaide', 'macquarie', 'rmit'],
-  'Canada':         ['toronto', 'mcgill', 'ubc', 'waterloo', 'alberta', 'queens', 'dalhousie', 'ottawa', 'western', 'montreal'],
-  'Singapore':      ['singapore', 'nus', 'ntu', 'smu'],
-  'Netherlands':    ['delft', 'netherlands', 'leiden', 'amsterdam', 'rotterdam', 'eindhoven', 'twente', 'utrecht', 'groningen'],
-  'Japan':          ['tokyo', 'kyoto', 'osaka', 'waseda', 'keio', 'nagoya', 'hiroshima', 'tohoku'],
-  'Germany':        ['munich', 'berlin', 'heidelberg', 'hamburg', 'frankfurt', 'bonn', 'tübingen', 'freiburg', 'lmu'],
-  'China Mainland': ['peking', 'tsinghua', 'fudan', 'zhejiang', 'nanjing', 'tongji', 'wuhan', 'renmin', 'sun yat'],
-  'Taiwan':         ['taiwan', 'nthu', 'ntu', 'ncku', 'yuan ze', 'tamkang'],
-};
-
-const classifyProgram = (program) => {
-  if (!program || program === '-') return 'Inter-disciplinary';
-  const p = program.toLowerCase();
-  for (const [key, keywords] of Object.entries(FIELD_KEYWORDS)) {
-    if (keywords.some(k => p.includes(k))) return key;
-  }
-  return 'Inter-disciplinary';
-};
-
-const inferCountry = (uniName) => {
-  if (!uniName || uniName === '-') return null;
-  const name = uniName.toLowerCase();
-  for (const [country, keywords] of Object.entries(COUNTRY_KEYWORDS)) {
-    if (keywords.some(k => name.includes(k))) return country;
-  }
-  return 'Inter-disciplinary';
-};
-
-const IGCSE_LETTER_GRADES = ['A*', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
+// ─── Constants ───────────────────────────────────────────────────────────────
 const ALEVEL_LETTER_GRADES = ['A*', 'A', 'B', 'C', 'D', 'E', 'U'];
 const IELTS_BANDS = ['9.0', '8.5', '8.0', '7.5', '7.0', '6.5', '<6.5'];
 const IELTS_COMPONENTS = ['overall', 'reading', 'writing', 'listening', 'speaking'];
-
-const normalizeIGCSEGrade = (grade) => {
-  const g = String(grade || '').toUpperCase().trim();
-  return IGCSE_LETTER_GRADES.includes(g) ? g : '';
-};
 
 // ─── Visual Components ───────────────────────────────────────────────────────
 const isSummaryRow = (row) => 
@@ -67,55 +27,9 @@ const isSummaryRow = (row) =>
   row.name === 'GRAND TOTAL' || 
   row.rowLabel === 'GRAND TOTAL';
 
-const Card = ({ children, title, icon: Icon, className = "", headerExtra, headerBg = "bg-slateBlue-100/30" }) => {
-  const [copied, setCopied] = React.useState(false);
-  const cardRef = React.useRef(null);
 
-  const handleCopy = () => {
-    const table = cardRef.current.querySelector('table');
-    if (table) {
-      const rows = Array.from(table.querySelectorAll('tr'));
-      const text = rows.map(row => {
-        const cells = Array.from(row.querySelectorAll('th, td'));
-        return cells.map(cell => {
-           // Handle nested data structures if any
-           return cell.innerText.replace(/\n/g, ' ').trim();
-        }).join('\t');
-      }).join('\n');
-      navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
-  return (
-    <div ref={cardRef} className={`bg-white rounded-xl shadow-md border-2 border-slateBlue-100/80 overflow-hidden flex flex-col h-full hover:shadow-lg transition-all duration-300 ${className}`}>
-      {title && (
-        <div className={`px-5 py-2.5 border-b border-gray-50 flex items-center justify-between shrink-0 ${headerBg}`}>
-          <div className="flex items-center gap-2">
-            {Icon && <Icon size={14} className="text-slateBlue-600" />}
-            <h3 className="text-[10px] font-black text-slateBlue-800 uppercase tracking-widest">{title}</h3>
-          </div>
-          <div className="flex items-center gap-2">
-             {headerExtra}
-             <button 
-               onClick={handleCopy}
-               className="p-1.5 hover:bg-white/50 rounded-md transition-colors text-slateBlue-400 hover:text-aura-teal"
-               title="Copy table data"
-             >
-               {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-             </button>
-          </div>
-        </div>
-      )}
-      <div className="overflow-x-auto grow">
-        {children}
-      </div>
-    </div>
-  );
-};
-
-const StatsTable = ({ headers, rows, emptyMsg = "No data available", noZebra = false }) => {
+const StatsTable = ({ headers, rows, emptyMsg = "No data available" }) => {
   const mainRows = rows?.filter(r => !isSummaryRow(r)) || [];
   const summaryRow = rows?.find(r => isSummaryRow(r));
 
@@ -147,8 +61,8 @@ const StatsTable = ({ headers, rows, emptyMsg = "No data available", noZebra = f
 
   return (
     <div className="flex flex-col h-full min-h-[220px]">
-      <div className="grow overflow-auto relative">
-        <table className="w-full text-center text-[10px] border-collapse tabular-nums text-slateBlue-700 table-fixed">
+      <div className="grow overflow-auto relative rounded-b-2xl">
+        <table className="w-full h-full text-center text-[10px] border-collapse tabular-nums text-slateBlue-700 table-fixed">
           <thead>
             <tr className="bg-slateBlue-800 text-white uppercase font-black text-[8.5px] tracking-widest border-b border-slateBlue-900 sticky top-0 z-20">
               {headers.map((h, i) => (
@@ -160,8 +74,11 @@ const StatsTable = ({ headers, rows, emptyMsg = "No data available", noZebra = f
           </thead>
           <tbody className="divide-y divide-gray-50">
             {mainRows.length > 0 ? mainRows.map((row, i) => renderRow(row, i)) : (
-              <tr><td colSpan={headers.length} className="px-4 py-8 text-center text-gray-400 italic font-medium">No data available</td></tr>
+              <tr><td colSpan={headers.length} className="px-4 py-8 text-center text-gray-400 italic font-medium">{emptyMsg}</td></tr>
             )}
+            <tr className="h-full border-0">
+              <td colSpan={headers.length} className="p-0 border-0 bg-white"></td>
+            </tr>
           </tbody>
           {summaryRow && (
             <tfoot className="sticky bottom-0 z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">

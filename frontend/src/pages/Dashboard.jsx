@@ -23,7 +23,9 @@ import {
   Globe, 
   BookOpen, 
   ChevronDown, 
-  RefreshCw 
+  RefreshCw,
+  Trophy,
+  Star
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -71,10 +73,65 @@ const Dashboard = () => {
 
   const metrics = useMemo(() => {
     const graduated = students.filter(s => s.status === 'GRADUATED' || s.status === 'ALUMNI').length;
-    const enrolled  = students.filter(s => s.status === 'ENROLLED').length;
     const total     = students.length;
     const years     = [...new Set(students.map(s => s.grad_year).filter(Boolean))].length;
-    return { graduated, enrolled, total, years };
+    const g11       = students.filter(s => String(s.grad_year) === '2027').length;
+    const g12       = students.filter(s => String(s.grad_year) === '2026').length;
+    const getEliteCount = (count) => students.filter(s => {
+      const ial = s.academicData?.ial || [];
+      return ial.filter(row => row.grade === 'A*').length >= count;
+    }).length;
+
+    const getElitePct = (count) => students.length > 0 ? ((count / students.length) * 100).toFixed(1) : 0;
+
+    const elite3 = getEliteCount(3);
+    const elite4 = getEliteCount(4);
+    const elite5 = getEliteCount(5);
+    const elite6 = getEliteCount(6);
+
+    const getGradeStats = (targetStudents, type, gradeLevels) => {
+      let total = 0;
+      let matchGrades = 0;
+      targetStudents.forEach(s => {
+        const data = s.academicData?.[type] || [];
+        data.forEach(row => {
+          if (row.grade && row.grade !== '-' && row.grade !== 'NR') {
+            total++;
+            const g = String(row.grade).trim().toUpperCase();
+            if (gradeLevels.includes(g)) matchGrades++;
+          }
+        });
+      });
+      return total > 0 ? ((matchGrades / total) * 100).toFixed(1) : 0;
+    };
+
+    const topLevels = ['A*', 'A', '9', '8', '7'];
+    const aLevels   = ['A', '8', '7']; // Mapping 7/8 to A for simplicity if numeric
+
+    const igcseAll = getGradeStats(students, 'igcse', topLevels);
+    const ialAll   = getGradeStats(students, 'ial', topLevels);
+    const igcseA   = getGradeStats(students, 'igcse', aLevels);
+    const ialA     = getGradeStats(students, 'ial', aLevels);
+
+    const gradYears = students.map(s => parseInt(s.grad_year)).filter(y => !isNaN(y) && y < 2026);
+    const lastYear  = gradYears.length > 0 ? Math.max(...gradYears) : 2025;
+    const lastYearStudents = students.filter(s => parseInt(s.grad_year) === lastYear);
+    
+    const igcseLast = getGradeStats(lastYearStudents, 'igcse', topLevels);
+    const ialLast   = getGradeStats(lastYearStudents, 'ial', topLevels);
+    const igcseALast = getGradeStats(lastYearStudents, 'igcse', aLevels);
+    const ialALast   = getGradeStats(lastYearStudents, 'ial', aLevels);
+
+    return { 
+      graduated, total, years, g11, g12, 
+      elite3, elite3Pct: getElitePct(elite3),
+      elite4, elite4Pct: getElitePct(elite4),
+      elite5, elite5Pct: getElitePct(elite5),
+      elite6, elite6Pct: getElitePct(elite6),
+      igcseAll, ialAll, igcseLast, ialLast, 
+      igcseA, ialA, igcseALast, ialALast,
+      lastYear
+    };
   }, [students]);
 
   const graduatedStudents = useMemo(() => students.filter(s => {
@@ -149,11 +206,151 @@ const Dashboard = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Total Students" value={metrics.total} icon={Users} color="bg-aura-teal" />
-        <MetricCard title="Graduated" value={metrics.graduated} icon={GraduationCap} color="bg-serene-indigo" />
-        <MetricCard title="Currently Enrolled" value={metrics.enrolled} icon={School} color="bg-blue-500" />
-        <MetricCard title="Cohort Years" value={metrics.years} icon={BookOpen} color="bg-purple-500" />
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+        {/* Total Graduates */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-blue-500 to-blue-600 border-none shadow-lg shadow-blue-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <GraduationCap size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <GraduationCap size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">Graduates</p>
+            </div>
+            <h3 className="text-3xl font-black">{metrics.graduated}</h3>
+          </div>
+        </Card>
+
+        {/* G12 Students */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-indigo-500 to-indigo-600 border-none shadow-lg shadow-indigo-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <Users size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Users size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">G12 (2026)</p>
+            </div>
+            <h3 className="text-3xl font-black">{metrics.g12}</h3>
+          </div>
+        </Card>
+
+        {/* G11 Students */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-violet-500 to-violet-600 border-none shadow-lg shadow-violet-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <Users size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Users size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">G11 (2027)</p>
+            </div>
+            <h3 className="text-3xl font-black">{metrics.g11}</h3>
+          </div>
+        </Card>
+
+        {/* Elite Card - Small Golden */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-amber-400 to-amber-500 border-none shadow-lg shadow-amber-500/30 group">
+          <div className="absolute -top-2 -right-2 opacity-20 group-hover:scale-110 transition-transform duration-500">
+            <Trophy size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Star size={10} className="text-white fill-white" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">3A* or above</p>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <h3 className="text-3xl font-black">{metrics.elite3}</h3>
+              <span className="text-[10px] font-black text-white/60">{metrics.elite3Pct}%</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* All Years A*-A Stats */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-slate-700 to-slate-800 border-none shadow-lg shadow-slate-800/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <BookOpen size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <BookOpen size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">A*-A %: All Time</p>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.igcseAll}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">IG</span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.ialAll}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">IAL</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* A % Card */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 border-none shadow-lg shadow-fuchsia-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <Star size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Star size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">A %: All vs {metrics.lastYear}</p>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.ialA}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">All</span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.ialALast}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">Last</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Last Year A*-A Stats */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-rose-500 to-rose-600 border-none shadow-lg shadow-rose-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <BookOpen size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <BookOpen size={10} className="text-white/70" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">A*-A: {metrics.lastYear}</p>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.igcseLast}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">IG</span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black">{metrics.ialLast}%</span>
+                <span className="text-[7px] font-bold text-white/50 uppercase">IAL</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* GCE History Card - Small Green */}
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 border-none shadow-lg shadow-emerald-600/20 group">
+          <div className="absolute -top-2 -right-2 opacity-20 group-hover:scale-110 transition-transform duration-500">
+            <School size={70} className="text-white" />
+          </div>
+          <div className="relative z-10 text-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <School size={10} className="text-white" />
+              <p className="text-[12px] font-black uppercase tracking-widest text-white/70">GCE History</p>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <h3 className="text-3xl font-black">{metrics.years}</h3>
+              <span className="text-[10px] font-black text-white/60">Batches</span>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <div>
@@ -228,12 +425,13 @@ const Dashboard = () => {
                     ))}
                   </Pie>
                   <Tooltip 
+                    isAnimationActive={false}
                     formatter={(value) => [`${value} (${((value / totalFieldStudents) * 100).toFixed(1)}%)`]}
                     contentStyle={{ fontSize: 9, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', boxShadow: '0 8px 30px rgba(0,0,0,0.1)', padding: '6px 10px', color: '#1e293b' }} 
                     itemStyle={{ color: '#14b8a6', fontWeight: 900, fontSize: 10 }}
                     offset={15}
-                    allowEscapeViewBox={{ x: true, y: true }}
-                    wrapperStyle={{ pointerEvents: 'none' }}
+                    allowEscapeViewBox={{ x: false, y: true }}
+                    wrapperStyle={{ pointerEvents: 'none', zIndex: 9999 }}
                   />
                 </PieChart>
               </ResponsiveContainer>

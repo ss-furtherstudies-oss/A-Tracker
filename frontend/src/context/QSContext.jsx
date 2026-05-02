@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as db from '../lib/supabaseService';
 import { useAuth } from './AuthContext';
 
@@ -96,6 +96,31 @@ export const QSProvider = ({ children }) => {
     }
   }, []);
 
+  const addBulkCustomMappings = useCallback(async (mappings) => {
+    if (!mappings || mappings.length === 0) return;
+    
+    const newMappings = {};
+    const dbRows = [];
+    
+    mappings.forEach(({ originalName, resolvedName }) => {
+      if (!originalName || !resolvedName) return;
+      const cleanOriginal = originalName.toUpperCase().trim();
+      const cleanResolved = resolvedName.toUpperCase().trim();
+      newMappings[cleanOriginal] = cleanResolved;
+      dbRows.push({ original_name: cleanOriginal, resolved_name: cleanResolved });
+    });
+    
+    if (dbRows.length === 0) return;
+
+    setCustomMappings(prev => ({ ...prev, ...newMappings }));
+
+    try {
+      await db.upsertUniversityMappings(dbRows);
+    } catch (err) {
+      console.error("Failed to persist bulk mappings:", err);
+    }
+  }, []);
+
   const lookupMaps = useMemo(() => {
     const exactMap = new Map();
     const acronymMap = new Map();
@@ -115,86 +140,78 @@ export const QSProvider = ({ children }) => {
     return { exactMap, acronymMap, normalizedMap };
   }, [overallData]);
 
-  const lookupCache = useMemo(() => new Map(), [overallData, customMappings]);
+  // Use a ref for the cache to prevent re-creating lookup functions on every cache update
+  const lookupCache = useRef(new Map());
+  
+  // Clear cache when base data changes
+  useEffect(() => {
+    lookupCache.current.clear();
+  }, [overallData, customMappings]);
 
   const findUniversityByName = useCallback((name) => {
-    if (!name || name === '-') return null;
+    if (!name || name === '-' || name === 'N.A.') return null;
     const cleanName = name.toUpperCase().trim();
 
-    // Requirement: TBC doesn't need mapping
     if (cleanName === 'TBC') return { university: 'TBC', rank_latest: null };
 
-    if (lookupCache.has(cleanName)) return lookupCache.get(cleanName);
+    if (lookupCache.current.has(cleanName)) return lookupCache.current.get(cleanName);
 
     const { exactMap, acronymMap, normalizedMap } = lookupMaps;
     
-    const mappedName =
-      buildNameVariants(cleanName).map((k) => customMappings[k]).find(Boolean) || null;
+    const variants = buildNameVariants(cleanName);
+    const mappedName = variants.map((k) => customMappings[k]).find(Boolean) || null;
+    
     if (mappedName) {
-      const match =
-        buildNameVariants(mappedName).map((k) => exactMap.get(k)).find(Boolean) || null;
+      const match = buildNameVariants(mappedName).map((k) => exactMap.get(k)).find(Boolean) || null;
       if (match) {
-        lookupCache.set(cleanName, match);
+        lookupCache.current.set(cleanName, match);
         return match;
       }
-      return { university: mappedName, rank_latest: null };
+      const result = { university: mappedName, rank_latest: null };
+      lookupCache.current.set(cleanName, result);
+      return result;
     }
 
-    let found = null;
-    found = exactMap.get(cleanName) ?? null;
-    if (!found) found = acronymMap.get(cleanName) ?? null;
+    let found = exactMap.get(cleanName) ?? acronymMap.get(cleanName) ?? null;
+    
     if (!found) {
       const normName = normalize(cleanName);
       if (normName.length > 3) found = normalizedMap.get(normName) ?? null;
     }
 
-    if (!found) {
+    if (!found && cleanName.length > 3) {
       const normName = normalize(cleanName);
-      if (normName.length > 3) {
-        let bestDist = Infinity;
-        let bestMatch = null;
-        overallData.forEach(u => {
-          const uNorm = normalize(u.university);
-          const dist = levenshtein(uNorm, normName);
-          if (dist <= 3 && dist < bestDist) {
-            bestDist = dist;
-            bestMatch = u;
-          }
-        });
-        if (bestMatch) found = bestMatch;
+      let bestDist = 4; // Threshold
+      let bestMatch = null;
+      
+      for (const u of overallData) {
+        const uNorm = normalize(u.university);
+        // Only run Levenshtein if length difference is small
+        if (Math.abs(uNorm.length - normName.length) > 3) continue;
+        
+        const dist = levenshtein(uNorm, normName);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestMatch = u;
+          if (dist === 1) break; // Good enough
+        }
       }
+      if (bestMatch) found = bestMatch;
     }
 
-    lookupCache.set(cleanName, found);
+    lookupCache.current.set(cleanName, found);
     return found;
-  }, [lookupMaps, lookupCache, overallData, customMappings]);
+  }, [lookupMaps, overallData, customMappings]);
 
   const findRankByName = useCallback((name) => {
-    if (!name || name === '-') return null;
-    const cleanName = name.toUpperCase().trim();
-
-    if (cleanName === 'TBC') return null;
-
-    const mappedName =
-      buildNameVariants(cleanName).map((k) => customMappings[k]).find(Boolean) || null;
-    if (mappedName) {
-      const match =
-        buildNameVariants(mappedName).map((k) => lookupMaps.exactMap.get(k)).find(Boolean) || null;
-      if (match) return match.rank_latest ?? 'N.A.';
-      return 'N.A.';
-    }
-
     const u = findUniversityByName(name);
-    if (!u) return null;
-    return u.rank_latest ?? 'N.A.';
-  }, [findUniversityByName, customMappings, lookupMaps]);
+    return u?.rank_latest ?? null;
+  }, [findUniversityByName]);
 
   const updateQSData = async (newData) => {
     try {
       const { error } = await db.upsertQSRankings(newData);
-      
       if (error) throw error;
-      
       await initQSData();
       return { success: true };
     } catch (err) {
@@ -207,7 +224,7 @@ export const QSProvider = ({ children }) => {
     <QSContext.Provider value={{
       overallData, setOverallData, updateQSData,
       subjectData, setSubjectData,
-      customMappings, addCustomMapping,
+      customMappings, addCustomMapping, addBulkCustomMappings,
       findRankByName, findUniversityByName,
       loading, refreshData: initQSData
     }}>

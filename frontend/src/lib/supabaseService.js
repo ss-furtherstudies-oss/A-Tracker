@@ -36,6 +36,9 @@ export const fetchApplications = () =>
 export const insertApplications = (rows) =>
   supabase.from('applications').insert(rows).select();
 
+export const upsertApplications = (rows) =>
+  supabase.from('applications').upsert(rows, { onConflict: 'id' }).select();
+
 export const updateApplicationById = (id, updates) =>
   supabase.from('applications').update(updates).eq('id', id);
 
@@ -71,8 +74,12 @@ export const fetchQSRankings = async () => {
   return { data: allRows, error: null };
 };
 
-export const upsertQSRankings = (rows) =>
-  supabase.from('qs_rankings').upsert(rows, { onConflict: 'university' });
+export const upsertQSRankings = (rows) => {
+  // If rows have IDs, we are likely updating existing records, so conflict on 'id'.
+  // If not, we are importing new data, so conflict on 'university' name.
+  const hasId = rows.length > 0 && rows[0].id;
+  return supabase.from('qs_rankings').upsert(rows, { onConflict: hasId ? 'id' : 'university' });
+};
 
 // ─── University Mappings ────────────────────────────────────────────────────
 
@@ -84,6 +91,9 @@ export const upsertUniversityMapping = (original, resolved) =>
     { original_name: original, resolved_name: resolved },
     { onConflict: 'original_name' }
   );
+
+export const upsertUniversityMappings = (rows) =>
+  supabase.from('university_mappings').upsert(rows, { onConflict: 'original_name' });
 
 // ─── Profiles (admin user management) ───────────────────────────────────────
 

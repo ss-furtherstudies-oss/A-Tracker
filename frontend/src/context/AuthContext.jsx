@@ -3,19 +3,23 @@ import { supabase } from '../lib/supabaseClient';
 import * as db from '../lib/supabaseService';
 
 const AuthContext = createContext();
-const AUTH_BOOT_TIMEOUT_MS = 4000;
+const AUTH_BOOT_TIMEOUT_MS = 60000;
 
 const resolveUserRole = async (currentUser) => {
   if (!currentUser) return 'VIEWER';
 
-  const { data: profile, error } = await db.fetchProfileById(currentUser.id);
+  try {
+    const { data: profile, error } = await Promise.race([
+      db.fetchProfileById(currentUser.id),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 10000))
+    ]);
+    
+    if (error) return 'VIEWER';
 
-  if (error) {
-    console.warn('Profile fetch error (table might not exist yet):', error.message);
+    return profile?.role || 'VIEWER';
+  } catch {
     return 'VIEWER';
   }
-
-  return profile?.role || 'VIEWER';
 };
 
 const AuthLoadingScreen = () => (
@@ -39,7 +43,10 @@ export const AuthProvider = ({ children }) => {
     let active = true;
 
     const finishLoading = () => {
-      if (active) setLoading(false);
+      if (active) {
+        setLoading(false);
+        window.clearTimeout(timeoutId);
+      }
     };
 
     const timeoutId = window.setTimeout(() => {
@@ -53,13 +60,18 @@ export const AuthProvider = ({ children }) => {
     // Check active sessions and sets the user
     const getSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('[AUTH] Getting session...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        
         const currentUser = session?.user ?? null;
+        console.log('[AUTH] Session user:', currentUser?.email || 'NONE');
+        
         if (!active) return;
         setUser(currentUser);
         setRole(await resolveUserRole(currentUser));
       } catch (err) {
-        console.error("Auth session error:", err);
+        console.error("[AUTH] Auth session error:", err);
         if (active) setRole('VIEWER');
       } finally {
         finishLoading();
@@ -92,14 +104,13 @@ export const AuthProvider = ({ children }) => {
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
   const signUp = (email, password) => supabase.auth.signUp({ email, password });
   const signOut = async () => {
+    // Clear state immediately for instant UI feedback
+    setUser(null);
+    setRole('VIEWER');
     try {
       await supabase.auth.signOut();
     } catch (err) {
       console.error('Logout error:', err.message);
-    } finally {
-      // Force clear state to ensure UI updates even if onAuthStateChange is delayed
-      setUser(null);
-      setRole('VIEWER');
     }
   };
   const signInWithGoogle = () => supabase.auth.signInWithOAuth({ provider: 'google' });

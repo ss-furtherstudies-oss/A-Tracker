@@ -11,14 +11,11 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 -- Create a helper function to check if the current user is an ADMIN
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS boolean AS $$
-DECLARE
-  user_role text;
-BEGIN
-  -- Get the role from the profiles table for the authenticated user
-  SELECT role INTO user_role FROM profiles WHERE id = auth.uid();
-  RETURN user_role = 'ADMIN';
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+  SELECT EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE id = auth.uid() AND role = 'ADMIN'
+  );
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- ==========================================
 -- Policies for 'profiles' table

@@ -99,6 +99,7 @@ function AppContent() {
               <Route path="/rankings"           element={<QSRankings />} />
               <Route path="/statistics"         element={<Statistics />} />
               <Route path="/settings"           element={<Settings />} />
+              <Route path="*"                   element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
         </main>

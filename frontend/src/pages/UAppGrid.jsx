@@ -1,21 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { X, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { useQS } from '../context/QSContext';
 import { useStudents } from '../context/StudentContext';
 import { useAuth } from '../context/AuthContext';
 import * as db from '../lib/supabaseService';
+import { useVirtualScroll } from '../utils/useVirtual';
 import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesModal';
 import ApplicationEntryModal from '../components/modals/ApplicationEntryModal';
 import UAppToolbar from '../components/uapp/UAppToolbar';
 import UAppRow from '../components/uapp/UAppRow';
 import { ImportConflictModal, TemplateYearModal } from '../components/uapp/UAppModals';
-
-const isTruthyCell = (value) => {
-  const v = String(value ?? '').trim().toLowerCase();
-  return v === 'true' || v === 'yes' || v === '1' || v === 'y';
-};
-const normalizeUniKey = (value) => String(value ?? '').trim().toUpperCase();
+import { useUAppImport } from '../hooks/useUAppImport';
+import { REVERSE_LOCATION_MAP } from '../constants/uapp';
 
 const UAppGrid = () => {
   const { role } = useAuth();
@@ -26,6 +23,8 @@ const UAppGrid = () => {
     loading,
     updateApplication,
     addApplications,
+    upsertApplications,
+    upsertStudents,
     deleteApplication,
     clearAllApplications,
     refreshData
@@ -35,18 +34,15 @@ const UAppGrid = () => {
   const [editingEntry, setEditingEntry] = useState(null);
   const [selectedStudentForEntry, setSelectedStudentForEntry] = useState(null);
 
+  const [isAppModalOpen, setIsAppModalOpen] = useState(false);
+  const [selectedStudentForApps, setSelectedStudentForApps] = useState(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [yearFilter, setYearFilter] = useState('All');
   const [filterFinalOnly, setFilterFinalOnly] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
-  const [exportModal, setExportModal] = useState({ isOpen: false, type: null });
 
-  const [pendingPreImportData, setPendingPreImportData] = useState(null);
-  const [resolvingUnies, setResolvingUnies] = useState([]);
-  const [pendingImport, setPendingImport] = useState(null);
-  const [conflictIndex, setConflictIndex] = useState(0);
-  const [isMergingAllConflicts, setIsMergingAllConflicts] = useState(false);
-  const importInputRef = useRef(null);
+  const containerRef = useRef(null);
   const canEditApplications = role === 'ADMIN';
 
   const data = useMemo(() => {
@@ -59,6 +55,20 @@ const UAppGrid = () => {
 
     return sharedStudents.map((s) => {
       const apps = appsByStudent.get(s.id) || [];
+      // Sort: Final Destination -> Location -> University Name -> Offer
+      apps.sort((a, b) => {
+        if (a.is_final !== b.is_final) return a.is_final ? -1 : 1;
+        const locA = a.country || '';
+        const locB = b.country || '';
+        if (locA !== locB) return locA.localeCompare(locB);
+        const uniA = a.university || '';
+        const uniB = b.university || '';
+        if (uniA !== uniB) return uniA.localeCompare(uniB);
+        const offerA = a.has_offer || a.status === 'OFFER';
+        const offerB = b.has_offer || b.status === 'OFFER';
+        if (offerA !== offerB) return offerA ? -1 : 1;
+        return Number(a.id) - Number(b.id); // Fallback to ID for complete stability
+      });
       const finalApp = apps.find((a) => a.is_final === true);
       return {
         id: s.id,
@@ -92,20 +102,29 @@ const UAppGrid = () => {
         if (filterFinalOnly && !s.final_dest_uni) return false;
         if (!term) return true;
         const inName = `${s.person.name_en} ${s.person.name_zh}`.toLowerCase().includes(term);
-        const inId = String(s.student_num || '').toLowerCase().includes(term);
         const inApps = s.applications.some((a) => {
           if (filterFinalOnly && !a.is_final) return false;
           const u = String(a.university || '').toLowerCase();
           const p = String(a.program || '').toLowerCase();
           return u.includes(term) || p.includes(term);
         });
-        return inName || inId || inApps;
+        return inName || inApps;
       })
       .sort((a, b) => {
         if (a.grad_year !== b.grad_year) return Number(b.grad_year) - Number(a.grad_year);
         return (a.person.name_en || '').localeCompare(b.person.name_en || '');
       });
   }, [data, searchTerm, yearFilter, filterFinalOnly]);
+
+  const ITEM_HEIGHT = 56;
+  const { startIndex, endIndex, paddingTop, paddingBottom } = useVirtualScroll({
+    containerRef,
+    itemHeight: ITEM_HEIGHT,
+    itemCount: filteredData.length,
+    overscan: 10
+  });
+
+  const visibleData = filteredData.slice(startIndex, endIndex);
 
   const showToast = (type, text) => {
     setImportMsg({ type, text });
@@ -124,239 +143,111 @@ const UAppGrid = () => {
     }
   };
 
-  const executeExport = (type, targetYear) => {
-    // 1. Updated Headers: Removed 'Class', swapped 'Chinese Name' and 'Other Name'
-    const headers = [
-      'Grad Year', 'Student ID', 'English Name', 'Other Name', 'Chinese Name', 
-      'Country', 'University', 'Program', 'Quali', 'Offer Type', 'Conditions', 'Decision', 'Final Destination'
-    ];
+  const {
+    exportModal, setExportModal,
+    resolvingUnies,
+    pendingImport,
+    conflictIndex,
+    isMergingAllConflicts,
+    importInputRef,
+    executeExport,
+    handleImportXL,
+    handleResolveOneRow,
+    handleFinishResolve,
+    handleCloseResolveModal,
+    advanceConflict,
+    handleConflictMerge,
+    handleConflictImportAll,
+    handleConflictMergeAll
+  } = useUAppImport({
+    data, sharedStudents, uappData, findUniversityByName, addCustomMapping, upsertStudents, upsertApplications, addApplications, refreshData, showToast
+  });
 
-    // 2. Sorting: Sort by Grad Year (descending) first, then English Name (alphabetical)
-    const targetStudents = data
-      .filter((s) => targetYear === 'All' || String(s.grad_year) === String(targetYear))
-      .sort((a, b) => {
-        if (a.grad_year !== b.grad_year) return Number(b.grad_year) - Number(a.grad_year);
-        return (a.person.name_en || '').localeCompare(b.person.name_en || '');
-      });
-
-    let rows = [];
-    if (type === 'FULL') {
-      targetStudents.forEach((s) => {
-        if (s.applications.length === 0) {
-          // Columns: Year, ID, Eng, Other, Chinese, ... (empty app fields)
-          rows.push([
-            s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
-            '', '', '', '', '', '', '', ''
-          ]);
-        } else {
-          s.applications.forEach((app) => {
-            rows.push([
-              s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
-              app.country || '', app.university || '', app.program || '', app.quali || '', 
-              app.has_offer ? 'Y' : 'N', app.condition || '', app.decision || '', app.is_final ? 'Y' : 'N'
-            ]);
-          });
-        }
-      });
-    } else {
-      // Template only: No applications
-      rows = targetStudents.map((s) => [
-        s.grad_year, s.student_num, s.person.name_en, s.person.other_name, s.person.name_zh, 
-        '', '', '', '', '', '', '', ''
-      ]);
-    }
-
-    // 3. Export as CSV
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    XLSX.utils.book_append_sheet(wb, ws, 'U-App Data');
-    
-    // Using writeFile with bookType: 'csv' for automatic formatting
-    XLSX.writeFile(wb, `${type === 'FULL' ? 'Full_UApp_Data' : 'Template_UApp'}_${targetYear}.csv`, { bookType: 'csv' });
-    
-    setExportModal({ isOpen: false, type: null });
-  };
-
-  const processImportData = async (rows) => {
-    try {
-      const studentMap = new Map();
-      rows.forEach((row) => {
-        const studentId = String(row['Student ID'] || '').trim();
-        if (!studentId) return;
-        if (!studentMap.has(studentId)) {
-          studentMap.set(studentId, { student_num: studentId, grad_year: parseInt(row['Grad Year'] || '0', 10) || null, name_en: String(row['English Name'] || '').trim(), name_zh: String(row['Chinese Name'] || '').trim(), other_name: String(row['Other Name'] || '').trim(), applications: [] });
-        }
-        const app = { country: String(row['Country'] || '').trim(), university: (() => { const raw = String(row['University'] || '').trim(); return findUniversityByName(raw)?.university || raw; })(), program: String(row['Program'] || '').trim(), quali: String(row['Quali'] || '').trim(), condition: String(row['Conditions'] || '').trim(), decision: String(row['Decision'] || '').trim(), has_offer: isTruthyCell(row['Offer Type']), is_final: isTruthyCell(row['Final Destination']), status: isTruthyCell(row['Offer Type']) ? 'OFFER' : 'PENDING' };
-        if (app.university || app.program || app.country) studentMap.get(studentId).applications.push(app);
-      });
-      const conflicts = [];
-      const newStudents = [];
-      for (const [sid, imported] of studentMap.entries()) {
-        const existing = sharedStudents.find((s) => s.student_num === sid);
-        if (!existing) { newStudents.push(imported); continue; }
-        const existingApps = uappData.filter((a) => a.student_id === existing.id);
-        const existingUniKeys = new Set(existingApps.map((a) => normalizeUniKey(a.university)).filter(Boolean));
-        const seenImportUniKeys = new Set();
-        const newApps = [];
-        const duplicateApps = [];
-        imported.applications.forEach((app) => {
-          const uniKey = normalizeUniKey(app.university);
-          if (!uniKey) { newApps.push(app); return; }
-          if (seenImportUniKeys.has(uniKey) || existingUniKeys.has(uniKey)) { duplicateApps.push(app); return; }
-          seenImportUniKeys.add(uniKey);
-          newApps.push(app);
-        });
-        conflicts.push({ existing, imported, newApps, duplicateApps, duplicateUniversities: Array.from(new Set(duplicateApps.map((a) => String(a.university || '').trim()).filter(Boolean))) });
-      }
-      for (const student of newStudents) {
-        const { data: created, error } = await db.insertStudent({ student_num: student.student_num, name_en: student.name_en, name_zh: student.name_zh, other_name: student.other_name || null, grad_year: student.grad_year, status: 'APPLICANT' });
-        if (!error && student.applications.length > 0) {
-          const apps = student.applications.map((a) => ({ ...a, student_id: created.id }));
-          await addApplications(apps);
-        }
-      }
-      if (conflicts.length > 0) {
-        setPendingImport({ conflicts, newCount: newStudents.length });
-        setConflictIndex(0);
-        return;
-      }
-      await refreshData();
-      showToast('success', `Import complete. Added ${newStudents.length} new student records.`);
-    } catch (err) { showToast('error', `Import failed: ${err.message}`); }
-  };
-
-  const handleImportXL = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const dataArr = new Uint8Array(evt.target.result);
-        const wb = XLSX.read(dataArr, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (rows.length === 0) { showToast('warn', 'No data rows found.'); return; }
-        const unmapped = new Set();
-        rows.forEach((row) => {
-          const original = String(row['University'] || '').trim();
-          if (!original || ['withdrawn', 'others', 'other', '-'].includes(original.toLowerCase())) return;
-          const matched = findUniversityByName(original);
-          if (!matched) unmapped.add(original);
-          else row['University'] = matched.university;
-        });
-        if (unmapped.size > 0) {
-          setPendingPreImportData(rows);
-          setResolvingUnies(Array.from(unmapped));
-          return;
-        }
-        await processImportData(rows);
-      } catch (err) { showToast('error', `Import failed: ${err.message}`); }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleCloseResolveModal = async () => {
-    setResolvingUnies([]);
-    if (pendingPreImportData) {
-      const rows = pendingPreImportData;
-      setPendingPreImportData(null);
-      await processImportData(rows);
-    }
-  };
-
-  const advanceConflict = async () => {
-    const next = conflictIndex + 1;
-    if (next >= pendingImport?.conflicts.length) {
-      setPendingImport(null); setConflictIndex(0); await refreshData();
-      showToast('success', 'Import complete.');
-    } else { setConflictIndex(next); }
-  };
-
-  const handleConflictMerge = async () => {
-    const conflict = pendingImport.conflicts[conflictIndex];
-    const apps = (conflict.newApps || conflict.imported.applications || []).map((a) => ({ ...a, student_id: conflict.existing.id }));
-    if (apps.length > 0) await addApplications(apps);
-    await advanceConflict();
-  };
-
-  const handleConflictImportAll = async () => {
-    const conflict = pendingImport.conflicts[conflictIndex];
-    const apps = (conflict.imported.applications || []).map((a) => ({ ...a, student_id: conflict.existing.id }));
-    if (apps.length > 0) await addApplications(apps);
-    await advanceConflict();
-  };
-
-  const handleConflictMergeAll = async () => {
-    if (isMergingAllConflicts) return;
-    setIsMergingAllConflicts(true);
-    try {
-      const remaining = pendingImport.conflicts.slice(conflictIndex);
-      for (const conflict of remaining) {
-        const apps = (conflict.newApps || conflict.imported.applications || []).map((a) => ({ ...a, student_id: conflict.existing.id }));
-        if (apps.length > 0) await addApplications(apps);
-      }
-      setPendingImport(null); setConflictIndex(0); await refreshData();
-      showToast('success', 'Import complete.');
-    } finally { setIsMergingAllConflicts(false); }
-  };
-
-  const handleUpdateAppField = async (studentId, appId, field, value) => {
-    if (!canEditApplications) return;
-    const result = await updateApplication(studentId, appId, { [field]: value });
-    if (!result?.success) showToast('error', `Update failed: ${result?.error || 'Unknown error'}`);
-  };
-
-  const handleToggleFinal = async (studentId, appId) => {
-    if (!canEditApplications) return;
-    try {
-      const student = data.find((s) => s.id === studentId);
-      const current = student.applications.find((a) => a.id === appId);
-      const targetValue = !current.is_final;
-      if (targetValue) {
-        const others = student.applications.filter((a) => a.is_final && a.id !== appId);
-        for (const app of others) await updateApplication(studentId, app.id, { is_final: false });
-      }
-      await updateApplication(studentId, appId, { is_final: targetValue });
-      if (targetValue) {
-        await db.updateStudentById(studentId, { university_dest: current.university, program_dest: current.program, quali: current.quali || null });
-      }
-    } catch (err) { showToast('error', `Final update failed: ${err.message}`); }
-  };
-
-  const handleSaveEntry = async (entry) => {
+  const handleSaveEntry = async (entryOrEntries, deletedIds = []) => {
     if (!canEditApplications) return false;
+    const entries = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries];
+    
     try {
-      if (entry.is_final) {
-        const apps = uappData.filter((a) => a.student_id === entry.student_id && a.id !== entry.id && a.is_final);
-        for (const app of apps) await updateApplication(entry.student_id, app.id, { is_final: false });
+      let finalEntry = entries.find(e => e.is_final);
+      
+      // If setting a final entry, clear existing finals
+      if (finalEntry) {
+        const student_id = finalEntry.student_id;
+        const apps = uappData.filter((a) => a.student_id === student_id && !entries.some(e => e.id === a.id) && a.is_final && !deletedIds.includes(a.id));
+        for (const app of apps) await updateApplication(student_id, app.id, { is_final: false });
       }
-      if (entry.id) {
-        const { id, student_id, ...updates } = entry;
-        await updateApplication(student_id, id, updates);
-      } else {
-        await addApplications([entry]);
-      }
-      if (entry.is_final) {
-        await db.updateStudentById(entry.student_id, { university_dest: entry.university, program_dest: entry.program, quali: entry.quali || null });
-      }
-      await refreshData();
-      showToast('success', entry.id ? 'Application updated.' : 'Application added.');
-      return true;
-    } catch { showToast('error', 'Save failed.'); return false; }
-  };
 
-  const handleDeleteEntry = async (studentId, appId) => {
-    if (!canEditApplications || !window.confirm('Delete this application?')) return;
-    try {
-      const student = data.find((s) => s.id === studentId);
-      const targetApp = student?.applications?.find((a) => a.id === appId);
-      await deleteApplication(studentId, appId);
-      if (targetApp?.is_final) {
-        await db.updateStudentById(studentId, { university_dest: null, program_dest: null, quali: null });
+      // Handle Deletions sequentially to avoid potential database locks
+      for (const id of deletedIds) {
+        const appToDelete = uappData.find(a => a.id === id);
+        if (appToDelete) {
+           const result = await deleteApplication(appToDelete.student_id, id);
+           if (!result.success) throw new Error(`Delete failed: ${result.error}`);
+
+           if (appToDelete.is_final && !finalEntry) {
+              await Promise.race([
+                db.updateStudentById(appToDelete.student_id, { university_dest: null, program_dest: null, quali: null }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+              ]).catch(err => console.warn('Student update timeout:', err));
+           }
+        }
       }
-      showToast('success', 'Application deleted.');
-    } catch (err) { showToast('error', `Delete failed: ${err.message}`); }
+
+      const toAdd = entries.filter(e => !e.id);
+      
+      // OPTIMIZATION: Only update rows that have actually changed
+      const toUpdate = entries.filter(e => {
+        if (!e.id) return false;
+        const original = uappData.find(a => a.id === e.id);
+        if (!original) return true;
+        
+        // Match the initialization logic in ApplicationEntryModal exactly
+        const originalStatus = String(original.status || '').toUpperCase();
+        const originalHasOffer = !!original.has_offer || originalStatus === 'OFFER';
+        
+        // Modal sends has_offer as boolean and status as 'OFFER'/'PENDING'
+        const hasOfferChanged = originalHasOffer !== !!e.has_offer;
+
+        const hasChanged = 
+          (original.country || '') !== (REVERSE_LOCATION_MAP[e.location] || e.location || '') ||
+          (original.university || '') !== (e.university || '') ||
+          (original.program || '') !== (e.program || '') ||
+          (original.quali || '') !== (e.quali || '') ||
+          (original.condition || '') !== (e.condition || '') ||
+          (original.decision || '') !== (e.decision || '') ||
+          !!original.is_final !== !!e.is_final ||
+          hasOfferChanged;
+          
+        return hasChanged;
+      });
+
+      // Handle Updates concurrently
+      const updatePromises = toUpdate.map(async (entry) => {
+        const { id, student_id, ...updates } = entry;
+        const result = await updateApplication(student_id, id, updates);
+        if (!result.success) throw new Error(`Update failed: ${result.error}`);
+        return result;
+      });
+      await Promise.all(updatePromises);
+
+      if (toAdd.length > 0) {
+        const result = await addApplications(toAdd);
+        if (!result.success) throw new Error(`Add failed: ${result.error}`);
+      }
+
+      // Fetch data with a timeout in case the select query hangs
+      await Promise.race([
+        refreshData(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+      ]).catch(err => console.warn('Refresh data timeout:', err));
+      
+      showToast('success', entries.length > 1 || deletedIds.length > 0 ? 'Applications saved.' : (entries[0] && entries[0].id ? 'Application updated.' : 'Application added.'));
+      return true;
+    } catch (err) { 
+      console.error('[SAVE_ENTRY] Error:', err); 
+      showToast('error', err.message || 'Save failed.'); 
+      return false; 
+    }
   };
 
   return (
@@ -371,6 +262,7 @@ const UAppGrid = () => {
         onAddClick={() => { setEditingEntry(null); setSelectedStudentForEntry(null); setIsEntryModalOpen(true); }}
         onClearClick={handleClearAll}
         canEdit={canEditApplications}
+        resultsCount={filteredData.length}
       />
       <input ref={importInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportXL} className="hidden" />
 
@@ -396,7 +288,10 @@ const UAppGrid = () => {
       />
 
       <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden w-full">
-        <div className="overflow-auto max-h-[70vh]">
+        <div 
+          ref={containerRef}
+          className="overflow-auto max-h-[70vh]"
+        >
           <table className="w-full text-left text-xs text-slateBlue-800 border-collapse">
             <thead>
               <tr className="bg-slateBlue-800 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-30 shadow-sm">
@@ -412,16 +307,19 @@ const UAppGrid = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
+              {paddingTop > 0 && <tr style={{ height: `${paddingTop}px` }} aria-hidden="true"><td colSpan="9" /></tr>}
               {loading ? (
                 <tr><td colSpan="9" className="px-4 py-16 text-center text-gray-400 font-bold">Loading applications...</td></tr>
-              ) : filteredData.length > 0 ? (
-                filteredData.map((student, idx) => (
+              ) : visibleData.length > 0 ? (
+                visibleData.map((student, i) => (
                   <UAppRow
-                    key={student.id} student={student} index={idx}
-                    onToggleFinal={handleToggleFinal} onUpdateApp={handleUpdateAppField}
-                    onDeleteApp={handleDeleteEntry} onEditApp={(s, a) => { setSelectedStudentForEntry(s); setEditingEntry(a); setIsEntryModalOpen(true); }}
-                    onAddApp={(s) => { setSelectedStudentForEntry(s); setEditingEntry(null); setIsEntryModalOpen(true); }}
-                    canEdit={canEditApplications}
+                    key={student.id || (startIndex + i)} 
+                    student={student} 
+                    index={startIndex + i}
+                    onViewApplications={(s) => {
+                      setSelectedStudentForApps(s);
+                      setIsAppModalOpen(true);
+                    }}
                   />
                 ))
               ) : (
@@ -434,6 +332,7 @@ const UAppGrid = () => {
                   </td>
                 </tr>
               )}
+              {paddingBottom > 0 && <tr style={{ height: `${paddingBottom}px` }} aria-hidden="true"><td colSpan="9" /></tr>}
             </tbody>
           </table>
         </div>
@@ -441,7 +340,7 @@ const UAppGrid = () => {
 
       <ApplicationEntryModal
         isOpen={isEntryModalOpen} onClose={() => setIsEntryModalOpen(false)}
-        onSave={handleSaveEntry} initialStudent={selectedStudentForEntry} initialApplication={editingEntry}
+        onSave={handleSaveEntry} initialStudent={selectedStudentForEntry} initialApplications={editingEntry ? [editingEntry] : null}
       />
 
       {exportModal.isOpen && (
@@ -451,14 +350,29 @@ const UAppGrid = () => {
         />
       )}
 
+      {isAppModalOpen && selectedStudentForApps && (
+        <ApplicationEntryModal
+          isOpen={true}
+          onClose={() => { setIsAppModalOpen(false); setSelectedStudentForApps(null); }}
+          onSave={async (entries, deletedIds) => {
+             const success = await handleSaveEntry(entries, deletedIds);
+             if (success) {
+               setIsAppModalOpen(false); 
+               setSelectedStudentForApps(null);
+             }
+             return success;
+          }}
+          initialStudent={selectedStudentForApps}
+          initialApplications={selectedStudentForApps.applications}
+        />
+      )}
+
       <ResolveUniversitiesModal
-        isOpen={resolvingUnies.length > 0} onClose={handleCloseResolveModal}
+        isOpen={resolvingUnies.length > 0}
+        onClose={handleCloseResolveModal}
         unmappedNames={resolvingUnies}
-        onResolve={async (oldName, newName) => {
-          const resolved = findUniversityByName(newName)?.university || String(newName || '').trim();
-          await addCustomMapping(oldName, resolved);
-          setPendingPreImportData(prev => prev?.map(row => normalizeUniKey(row['University']) === normalizeUniKey(oldName) ? { ...row, University: resolved } : row));
-        }}
+        onResolveRow={handleResolveOneRow}
+        onFinish={handleFinishResolve}
       />
     </div>
   );
