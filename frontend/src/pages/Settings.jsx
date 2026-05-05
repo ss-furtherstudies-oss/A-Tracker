@@ -100,7 +100,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-[1600px] space-y-8 animate-in fade-in duration-500 px-4 pb-10">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
