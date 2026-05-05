@@ -154,5 +154,5 @@ export const fetchProfiles = () =>
 export const fetchProfileById = (id) =>
   supabase.from('profiles').select('role').eq('id', id).single();
 
-export const updateProfileRole = (userId, newRole) =>
-  supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+export const updateProfile = (userId, updates) =>
+  supabase.from('profiles').update(updates).eq('id', userId);
