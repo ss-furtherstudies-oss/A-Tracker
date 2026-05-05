@@ -36,7 +36,7 @@ export const StatusBadge = ({ status }) => {
     WITHDRAWN: 'Withdrawn',
   };
   return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight whitespace-nowrap shadow-sm ${colors[status] || colors.APPLICANT}`} title={status}>
+    <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter whitespace-nowrap shadow-sm ${colors[status] || colors.APPLICANT}`} title={status}>
       {labels[status] || status}
     </span>
   );

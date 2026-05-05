@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  Users, School, Award, TrendingUp, MapPin, ChevronDown, Copy, Check, Download
+  Users, School, Award, TrendingUp, MapPin, ChevronDown, Copy, Check, Download, ArrowUpDown, ChevronUp, AlertCircle
 } from 'lucide-react';
 import { useStudents } from '../context/StudentContext';
 import { useQS } from '../context/QSContext';
@@ -29,9 +29,54 @@ const isSummaryRow = (row) =>
 
 
 
-const StatsTable = ({ headers, rows, emptyMsg = "No data available" }) => {
+const StatsTable = ({ headers, rows, emptyMsg = "No data available", onAction }) => {
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
   const mainRows = rows?.filter(r => !isSummaryRow(r)) || [];
   const summaryRow = rows?.find(r => isSummaryRow(r));
+
+  const sortedMainRows = useMemo(() => {
+    let sortableItems = [...mainRows];
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        if (aVal === undefined || aVal === null) aVal = '';
+        if (bVal === undefined || bVal === null) bVal = '';
+
+        if (sortConfig.key === 'rank') {
+          const aRank = parseInt(aVal);
+          const bRank = parseInt(bVal);
+          const aIsNaN = isNaN(aRank);
+          const bIsNaN = isNaN(bRank);
+          if (aIsNaN && !bIsNaN) return sortConfig.direction === 'asc' ? 1 : -1;
+          if (!aIsNaN && bIsNaN) return sortConfig.direction === 'asc' ? -1 : 1;
+          if (!aIsNaN && !bIsNaN) return sortConfig.direction === 'asc' ? aRank - bRank : bRank - aRank;
+        }
+
+        if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+        if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [mainRows, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      // reset sort
+      setSortConfig({ key: null, direction: 'asc' });
+      return;
+    }
+    setSortConfig({ key, direction });
+  };
 
   const renderRow = (row, rowIndex, isSummary = false) => (
     <tr key={rowIndex} className={`transition-colors ${row.className ? row.className : `hover:bg-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}`}>
@@ -49,9 +94,21 @@ const StatsTable = ({ headers, rows, emptyMsg = "No data available" }) => {
             {isDataColumn && cellData && typeof cellData === 'object' ? (
               <DataCellInner {...cellData} isSummary={isSummary} />
             ) : (
+            <div className="flex items-center justify-center gap-1.5">
               <span className={h.primary || h.key === 'name' || j === 0 || isSummary ? "font-black" : "font-bold opacity-90"}>
                 {cellData && cellData !== '-' ? cellData : ''}
               </span>
+              {h.key === 'name' && row.isUnmapped && !isSummary && onAction && (
+                <button 
+                  onClick={() => onAction(row.name)}
+                  className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors group/btn relative"
+                  title="Unmapped! Click to resolve."
+                >
+                  <AlertCircle size={12} className="animate-pulse" />
+                  <span className="absolute left-full ml-1 px-1.5 py-0.5 bg-slateBlue-800 text-white text-[8px] rounded opacity-0 group-hover/btn:opacity-100 whitespace-nowrap pointer-events-none z-30">RESOLVE</span>
+                </button>
+              )}
+            </div>
             )}
           </td>
         );
@@ -62,18 +119,30 @@ const StatsTable = ({ headers, rows, emptyMsg = "No data available" }) => {
   return (
     <div className="flex flex-col h-full min-h-[220px]">
       <div className="grow overflow-auto relative rounded-b-2xl">
-        <table className="w-full h-full text-center text-[10px] border-collapse tabular-nums text-slateBlue-700 table-fixed">
+        <table className="w-full h-full text-center text-xs border-collapse tabular-nums text-slateBlue-700 table-fixed">
           <thead>
-            <tr className="bg-slateBlue-800 text-white uppercase font-black text-[8.5px] tracking-widest border-b border-slateBlue-900 sticky top-0 z-20">
+            <tr className="bg-slateBlue-800 text-white uppercase font-black text-[10px] tracking-widest border-b border-slateBlue-900 sticky top-0 z-20">
               {headers.map((h, i) => (
                 <th key={i} className={`px-2 py-1.5 text-center ${h.width || ''}`}>
-                  {h.label}
+                  {h.sortable ? (
+                    <button 
+                      onClick={() => requestSort(h.key)}
+                      className="w-full flex items-center justify-center gap-1.5 hover:text-aura-teal transition-colors"
+                    >
+                      {h.label}
+                      {sortConfig.key === h.key ? (
+                        sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                      ) : (
+                        <ArrowUpDown size={10} className="opacity-40" />
+                      )}
+                    </button>
+                  ) : h.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {mainRows.length > 0 ? mainRows.map((row, i) => renderRow(row, i)) : (
+            {sortedMainRows.length > 0 ? sortedMainRows.map((row, i) => renderRow(row, i)) : (
               <tr><td colSpan={headers.length} className="px-4 py-8 text-center text-gray-400 italic font-medium">{emptyMsg}</td></tr>
             )}
             <tr className="h-full border-0">
@@ -93,7 +162,7 @@ const StatsTable = ({ headers, rows, emptyMsg = "No data available" }) => {
 
 const DataCellInner = ({ count, pct, hasData, labelOnly = false, isSummary = false }) => {
   if (!hasData) return <span className="text-gray-300"></span>;
-  if (labelOnly) return <span className={`${isSummary ? 'text-white' : 'text-slateBlue-800'} font-bold text-[11px]`}>{count > 0 ? count : ''}</span>;
+  if (labelOnly) return <span className={`${isSummary ? 'text-white' : 'text-slateBlue-800'} font-bold text-[13px]`}>{count > 0 ? count : ''}</span>;
   if (count === 0) return <span className="text-gray-200"></span>;
   
   const isHigh = pct >= 50;
@@ -102,8 +171,8 @@ const DataCellInner = ({ count, pct, hasData, labelOnly = false, isSummary = fal
 
   return (
     <div className="flex flex-col items-center leading-none py-1">
-      <span className={`text-[11px] ${colorClass}`}>{pct.toFixed(0)}%</span>
-      <span className={`text-[7px] font-bold ${isSummary ? 'text-white/70' : 'text-gray-400'} mt-0.5`}>({count})</span>
+      <span className={`text-[13px] ${colorClass}`}>{pct.toFixed(0)}%</span>
+      <span className={`text-[9px] font-bold ${isSummary ? 'text-white/70' : 'text-gray-400'} mt-0.5`}>({count})</span>
     </div>
   );
 };
@@ -125,7 +194,11 @@ const Select = ({ options, value, onChange, className = "" }) => (
 const Statistics = () => {
   const { t } = useTranslation();
   const { students = [] } = useStudents();
-  const { findRankByName } = useQS();
+  const { 
+    findRankByName, 
+    findUniversityByName,
+    addCustomMapping
+  } = useQS();
   const [activeTab, setActiveTab] = useState('academic');
   const [timeWindow, setTimeWindow] = useState('all'); 
 
@@ -189,7 +262,7 @@ const Statistics = () => {
   };
 
   const getGradeYearData = (type, subject) => {
-    const gradeScale = type === 'igcse' ? IGCSE_LETTER_GRADES : ALEVEL_LETTER_GRADES;
+    const gradeScale = type === 'igcse' ? [...IGCSE_LETTER_GRADES].reverse() : ALEVEL_LETTER_GRADES;
     const visibleYears = getVisibleYears(type, subject);
     const rows = gradeScale.map(grade => {
       const row = { grade };
@@ -316,9 +389,21 @@ const Statistics = () => {
     });
 
     validStudents.forEach(s => {
-      const uni = s.university_dest; if (!uni || uni === '-') return;
-      if (!map[uni]) map[uni] = { name: uni, total: 0, rank: findRankByName(uni) || 'N/A' };
-      map[uni].total++;
+      const uni = s.university_dest;
+      if (!uni || uni === '-') return;
+      
+      const foundUni = findUniversityByName ? findUniversityByName(uni) : null;
+      const displayName = foundUni ? foundUni.university : uni;
+      
+      if (!map[displayName]) {
+        map[displayName] = { 
+          name: displayName, 
+          total: 0, 
+          rank: foundUni?.rank_latest || 'N/A',
+          isUnmapped: !foundUni
+        };
+      }
+      map[displayName].total++;
     });
     
     let finalData = Object.values(map);
@@ -343,7 +428,7 @@ const Statistics = () => {
       });
     }
     return finalData;
-  }, [students, findRankByName, uniYear, uniLocation]);
+  }, [students, findUniversityByName, uniYear, uniLocation]);
 
   const pivotData = useMemo(() => {
     const validStudents = students.filter(s => {
@@ -452,6 +537,13 @@ const Statistics = () => {
   const iasMiles    = useMemo(() => getAMilestones('ias'),   [students, timeWindow, allYears]);
   const ialMiles    = useMemo(() => getAMilestones('ial'),   [students, timeWindow, allYears]);
 
+  const handleResolveConflict = async (originalName) => {
+    const resolvedName = window.prompt(`Map "${originalName}" to which university from the QS Ranking list?\n(Enter the exact name as it appears in the Rankings page)`);
+    if (resolvedName && resolvedName.trim()) {
+      await addCustomMapping(originalName, resolvedName.trim());
+    }
+  };
+
   return (
     <div className="space-y-4 px-2">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -514,7 +606,15 @@ const Statistics = () => {
             </div>
           }
         >
-          <StatsTable headers={[{ key: 'rank', label: 'QS Rank', center: true, width: 'w-24' }, { key: 'name', label: 'University', width: 'w-[300px]', left: true, primary: true }, { key: 'total', label: 'Count', center: true, width: 'w-24' }]} rows={uniEnrollment} />
+          <StatsTable 
+            headers={[
+              { key: 'rank', label: 'QS Rank', center: true, width: 'w-24', sortable: true }, 
+              { key: 'name', label: 'University', width: 'w-[300px]', left: true, primary: true, sortable: true }, 
+              { key: 'total', label: 'Count', center: true, width: 'w-24', sortable: true }
+            ]} 
+            rows={uniEnrollment} 
+            onAction={handleResolveConflict}
+          />
         </Card>
       )}
 

@@ -8,7 +8,22 @@ export const LOCATION_MAP = {
   'AU': 'Australia',
   'CN': 'China Mainland',
   'TW': 'Taiwan',
-  'JP': 'Japan'
+  'JP': 'Japan',
+  'SG': 'Singapore',
+  'KR': 'South Korea',
+  'CH': 'Switzerland',
+  'NL': 'Netherlands',
+  'DE': 'Germany',
+  'FR': 'France',
+  'IT': 'Italy',
+  'ES': 'Spain',
+  'SE': 'Sweden',
+  'DK': 'Denmark',
+  'NO': 'Norway',
+  'FI': 'Finland',
+  'IE': 'Ireland',
+  'NZ': 'New Zealand',
+  'MO': 'Macau SAR'
 };
 
 export const REVERSE_LOCATION_MAP = Object.entries(LOCATION_MAP).reduce((acc, [k, v]) => {

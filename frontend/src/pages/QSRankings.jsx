@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Upload, Download, TrendingUp, TrendingDown, Minus, X, Globe, BookOpen, Plus, Edit2, Save, RotateCcw } from 'lucide-react';
+import { Search, Upload, Download, TrendingUp, TrendingDown, Minus, X, Globe, BookOpen, Plus, Edit2, Save, RotateCcw, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { useQS } from '../context/QSContext';
 import { useAuth } from '../context/AuthContext';
 import { useVirtualScroll } from '../utils/useVirtual';
 
 const QSRankings = () => {
-  const { overallData, updateQSData, subjectData } = useQS();
+  const { overallData, updateQSData, deleteQSData, subjectData, addCustomMapping } = useQS();
   const { role } = useAuth();
   const [activeTab, setActiveTab] = useState('overall'); // 'overall' | 'subject'
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,7 +15,8 @@ const QSRankings = () => {
 
   // Inline editing state
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ university: '', rank_latest: '' });
+  const [editForm, setEditForm] = useState({ university: '', rank_latest: '', location: '', mapTo: '' });
+  const [sortConfig, setSortConfig] = useState({ key: 'rank_latest', direction: 'asc' });
 
   const containerRef = useRef(null);
   const ITEM_HEIGHT = 41;
@@ -26,6 +27,11 @@ const QSRankings = () => {
     const s = new Set(subjectData.map(r => r.subject).filter(Boolean));
     return ['All', ...Array.from(s).sort()];
   }, [subjectData]);
+
+  const locationsList = useMemo(() => {
+    const locs = new Set(overallData.map(r => r.location).filter(Boolean));
+    return Array.from(locs).sort();
+  }, [overallData]);
 
   const filteredData = useMemo(() => {
     let result = currentData;
@@ -38,17 +44,49 @@ const QSRankings = () => {
         r.university.toLowerCase().includes(term) ||
         r.location.toLowerCase().includes(term) ||
         String(r.rank_latest).includes(term)
-      );
+      ).sort((a, b) => {
+        // Prioritize results that START with the term
+        const aUni = a.university.toLowerCase();
+        const bUni = b.university.toLowerCase();
+        const aLoc = a.location.toLowerCase();
+        const bLoc = b.location.toLowerCase();
+        
+        const aStarts = aUni.startsWith(term) || aLoc.startsWith(term);
+        const bStarts = bUni.startsWith(term) || bLoc.startsWith(term);
+        
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        
+        // Secondary: Prioritize university name match over location match
+        const aUniMatch = aUni.includes(term);
+        const bUniMatch = bUni.includes(term);
+        if (aUniMatch && !bUniMatch) return -1;
+        if (!aUniMatch && bUniMatch) return 1;
+
+        return 0;
+      });
     }
     return [...result].sort((a, b) => {
-      const aRank = a.rank_latest;
-      const bRank = b.rank_latest;
-      if (aRank === null && bRank === null) return 0;
-      if (aRank === null) return 1;
-      if (bRank === null) return -1;
-      return aRank - bRank;
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
+      
+      if (aVal === null || aVal === undefined) aVal = '';
+      if (bVal === null || bVal === undefined) bVal = '';
+
+      if (['rank_latest', 'rank_prev', 'change'].includes(sortConfig.key)) {
+        const aNum = aVal === '' ? Infinity : Number(aVal);
+        const bNum = bVal === '' ? Infinity : Number(bVal);
+        return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
     });
-  }, [currentData, searchTerm, activeTab, subjectFilter]);
+  }, [currentData, searchTerm, activeTab, subjectFilter, sortConfig]);
 
   const { startIndex, endIndex, paddingTop, paddingBottom } = useVirtualScroll({
     containerRef,
@@ -59,16 +97,30 @@ const QSRankings = () => {
 
   const visibleData = filteredData.slice(startIndex, endIndex);
 
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      setSortConfig({ key: 'rank_latest', direction: 'asc' });
+      return;
+    }
+    setSortConfig({ key, direction });
+  };
+
   const startEdit = (row) => {
     setEditingId(row.id);
-    setEditForm({ university: row.university, rank_latest: row.rank_latest ?? '' });
+    setEditForm({ university: row.university, rank_latest: row.rank_latest ?? '', location: row.location || '', mapTo: '' });
   };
 
   const handleSaveEdit = async (row) => {
+    if (editForm.mapTo && editForm.mapTo.trim()) {
+      await addCustomMapping(row.university, editForm.mapTo.trim());
+    }
     const updated = {
       ...row,
       university: editForm.university.trim(),
-      rank_latest: editForm.rank_latest === '' ? null : parseInt(editForm.rank_latest)
+      rank_latest: editForm.rank_latest === '' ? null : parseInt(editForm.rank_latest),
+      location: editForm.location.trim()
     };
     
     const res = await updateQSData([updated]);
@@ -79,6 +131,18 @@ const QSRankings = () => {
       setImportMsg({ type: 'error', text: `Failed to update: ${res.error}` });
     }
     setTimeout(() => setImportMsg(null), 3000);
+  };
+
+  const handleDelete = async (row) => {
+    if (window.confirm(`Are you sure you want to delete ${row.university}?`)) {
+      const res = await deleteQSData(row.id);
+      if (res.success) {
+        setImportMsg({ type: 'success', text: 'Deleted university successfully.' });
+      } else {
+        setImportMsg({ type: 'error', text: `Failed to delete: ${res.error}` });
+      }
+      setTimeout(() => setImportMsg(null), 3000);
+    }
   };
 
   const handleImport = (e) => {
@@ -356,7 +420,7 @@ const QSRankings = () => {
       </div>
 
       {importMsg && (
-        <div className={`flex items-center justify-between px-4 py-3 rounded-super text-sm font-bold shadow-sm border ${importMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : importMsg.type === 'warn' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+        <div className={`fixed top-24 right-8 z-50 min-w-[300px] flex items-center justify-between px-4 py-3 rounded-super text-sm font-bold shadow-lg border ${importMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : importMsg.type === 'warn' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
           <span>{importMsg.text}</span>
           <button onClick={() => setImportMsg(null)} className="ml-4 hover:opacity-70"><X size={14} /></button>
         </div>
@@ -367,13 +431,33 @@ const QSRankings = () => {
           <table className="min-w-full text-left text-xs text-slateBlue-800 border-collapse table-fixed">
             <thead className="sticky top-0 z-30 bg-slateBlue-800 text-white">
               <tr className="uppercase font-black text-[10px] tracking-widest h-[40px]">
-                <th className="px-3 py-2 w-16 text-center">{yearLatestLabel}</th>
-                <th className="px-3 py-2 w-16 text-center">{yearPrevLabel}</th>
-                <th className="px-3 py-2 w-20 text-center">Change</th>
-                {activeTab === 'subject' && <th className="px-3 py-2 w-40">Subject</th>}
-                <th className="px-3 py-2 w-96">University</th>
-                <th className="px-3 py-2 w-16 text-center">Abbr</th>
-                <th className="px-3 py-2">Location</th>
+                {[
+                  { key: 'rank_latest', label: yearLatestLabel, width: 'w-16', center: true },
+                  { key: 'rank_prev', label: yearPrevLabel, width: 'w-16', center: true },
+                  { key: 'change', label: 'Change', width: 'w-20', center: true },
+                  ...(activeTab === 'subject' ? [{ key: 'subject', label: 'Subject', width: 'w-40' }] : []),
+                  { key: 'university', label: 'University', width: 'w-auto' },
+                  { key: 'abbr', label: 'Abbr', width: 'w-16', center: true, sortable: false },
+                  { key: 'location', label: 'Location', width: 'w-48' }
+                ].map((col) => (
+                  <th key={col.key} className={`px-3 py-2 ${col.width} ${col.center ? 'text-center' : 'text-left'}`}>
+                    {col.sortable !== false ? (
+                      <button 
+                        onClick={() => requestSort(col.key)}
+                        className={`w-full flex items-center gap-1.5 hover:text-aura-teal transition-colors ${col.center ? 'justify-center' : 'justify-start'}`}
+                      >
+                        {col.label}
+                        {sortConfig.key === col.key ? (
+                          sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                        ) : (
+                          <ArrowUpDown size={10} className="opacity-40" />
+                        )}
+                      </button>
+                    ) : (
+                      col.label
+                    )}
+                  </th>
+                ))}
                 {role === 'ADMIN' && <th className="px-3 py-2 w-24 text-center sticky right-0 bg-slateBlue-800 z-40">Actions</th>}
               </tr>
             </thead>
@@ -383,7 +467,7 @@ const QSRankings = () => {
                 visibleData.map((row, idx) => {
                   const isEditing = editingId === row.id;
                   return (
-                    <tr key={row.id} className={`border-b border-gray-50 hover:bg-slate-100 transition-colors h-[41px] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                    <tr key={row.id} className={`border-b border-gray-50 hover:bg-slate-100 transition-colors ${isEditing ? 'min-h-[60px]' : 'h-[41px]'} ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                       <td className="px-3 py-2 text-center">
                         {isEditing ? (
                           <input type="text" value={editForm.rank_latest} onChange={e => setEditForm({...editForm, rank_latest: e.target.value})} className="w-12 px-1 py-0.5 border border-aura-teal rounded focus:outline-none text-center font-black" />
@@ -396,15 +480,29 @@ const QSRankings = () => {
                       <td className="px-3 py-2 text-center text-gray-400 font-bold">{row.rank_prev ?? 'N.A.'}</td>
                       <td className="px-3 py-2 text-center"><ChangeIndicator change={row.change} /></td>
                       {activeTab === 'subject' && <td className="px-3 py-2 text-gray-500 font-semibold truncate">{row.subject}</td>}
-                      <td className="px-3 py-2 font-bold text-slateBlue-800 truncate" title={row.university}>
+                      <td className="px-3 py-2 font-bold text-slateBlue-800" title={row.university}>
                         {isEditing ? (
-                          <input type="text" value={editForm.university} onChange={e => setEditForm({...editForm, university: e.target.value})} className="w-full px-2 py-0.5 border border-aura-teal rounded focus:outline-none" />
+                          <div className="flex flex-col gap-1">
+                            <input type="text" value={editForm.university} onChange={e => setEditForm({...editForm, university: e.target.value})} className="w-full px-2 py-0.5 border border-aura-teal rounded focus:outline-none" placeholder="University" />
+                            <input type="text" value={editForm.mapTo} onChange={e => setEditForm({...editForm, mapTo: e.target.value})} className="w-full px-2 py-0.5 border border-amber-300 bg-amber-50 rounded focus:outline-none text-[10px] placeholder:text-amber-600/50 text-amber-900" placeholder="Alias: map to another university..." />
+                          </div>
                         ) : (
-                          row.university
+                          <div className="truncate">{row.university}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center font-black text-gray-500">{toAbbr(row.location)}</td>
-                      <td className="px-3 py-2 text-gray-500 font-semibold truncate">{row.location}</td>
+                      <td className="px-3 py-2 text-center font-black text-gray-500">{toAbbr(isEditing ? editForm.location : row.location)}</td>
+                      <td className="px-3 py-2 text-gray-500 font-semibold truncate">
+                        {isEditing ? (
+                          <>
+                            <input type="text" list="locations-list" value={editForm.location} onChange={e => setEditForm({...editForm, location: e.target.value})} className="w-full px-2 py-0.5 border border-aura-teal rounded focus:outline-none" />
+                            <datalist id="locations-list">
+                              {locationsList.map(loc => <option key={loc} value={loc} />)}
+                            </datalist>
+                          </>
+                        ) : (
+                          row.location
+                        )}
+                      </td>
                       {role === 'ADMIN' && (
                         <td className={`px-3 py-2 text-center sticky right-0 z-10 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                           {isEditing ? (
@@ -413,7 +511,10 @@ const QSRankings = () => {
                               <button onClick={() => setEditingId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded" title="Cancel"><RotateCcw size={14} /></button>
                             </div>
                           ) : (
-                            <button onClick={() => startEdit(row)} className="p-1 text-slateBlue-400 hover:text-aura-teal hover:bg-aura-teal/5 rounded transition-all" title="Edit"><Edit2 size={14} /></button>
+                            <div className="flex justify-center gap-1">
+                              <button onClick={() => startEdit(row)} className="p-1 text-slateBlue-400 hover:text-aura-teal hover:bg-aura-teal/5 rounded transition-all" title="Edit"><Edit2 size={14} /></button>
+                              <button onClick={() => handleDelete(row)} className="p-1 text-red-400 hover:text-red-500 hover:bg-red-50 rounded transition-all" title="Delete"><Trash2 size={14} /></button>
+                            </div>
                           )}
                         </td>
                       )}

@@ -10,8 +10,9 @@ import ResolveUniversitiesModal from '../components/modals/ResolveUniversitiesMo
 import ApplicationEntryModal from '../components/modals/ApplicationEntryModal';
 import UAppToolbar from '../components/uapp/UAppToolbar';
 import UAppRow from '../components/uapp/UAppRow';
-import { ImportConflictModal, TemplateYearModal } from '../components/uapp/UAppModals';
+import { ImportConflictModal, TemplateYearModal, ConfirmDeleteModal, DeduplicateModal } from '../components/uapp/UAppModals';
 import { useUAppImport } from '../hooks/useUAppImport';
+import { useUAppDeduplicate } from '../hooks/useUAppDeduplicate';
 import { REVERSE_LOCATION_MAP } from '../constants/uapp';
 
 const UAppGrid = () => {
@@ -25,6 +26,7 @@ const UAppGrid = () => {
     addApplications,
     upsertApplications,
     upsertStudents,
+    updateStudent,
     deleteApplication,
     clearAllApplications,
     refreshData
@@ -41,6 +43,7 @@ const UAppGrid = () => {
   const [yearFilter, setYearFilter] = useState('All');
   const [filterFinalOnly, setFilterFinalOnly] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
+  const [deleteConfirmParams, setDeleteConfirmParams] = useState(null);
 
   const containerRef = useRef(null);
   const canEditApplications = role === 'ADMIN';
@@ -82,7 +85,15 @@ const UAppGrid = () => {
         final_dest_uni: finalApp?.university || '',
         final_dest_prog: finalApp?.program || '',
         final_dest_cond: finalApp?.condition || '',
-        last_update: s.updated_at || '',
+        quali: finalApp?.quali || s.quali || '',
+        last_update: (() => {
+          const sUpdate = new Date(s.updated_at || s.created_at || 0).getTime();
+          const latestAppUpdate = apps.reduce((max, app) => {
+            const aUpdate = new Date(app.updated_at || app.created_at || 0).getTime();
+            return aUpdate > max ? aUpdate : max;
+          }, 0);
+          return new Date(Math.max(sUpdate, latestAppUpdate)).toISOString();
+        })(),
         as_grades: s.ias_score || '',
         applications: apps
       };
@@ -116,7 +127,7 @@ const UAppGrid = () => {
       });
   }, [data, searchTerm, yearFilter, filterFinalOnly]);
 
-  const ITEM_HEIGHT = 56;
+  const ITEM_HEIGHT = 70;
   const { startIndex, endIndex, paddingTop, paddingBottom } = useVirtualScroll({
     containerRef,
     itemHeight: ITEM_HEIGHT,
@@ -131,16 +142,28 @@ const UAppGrid = () => {
     setTimeout(() => setImportMsg(null), 4000);
   };
 
-  const handleClearAll = async () => {
-    if (window.confirm('Are you sure you want to delete ALL application data? This action cannot be undone.')) {
-      const result = await clearAllApplications();
-      if (result?.success) {
-        showToast('success', 'All application data has been cleared.');
-        await refreshData();
-      } else {
-        showToast('error', `Clear data failed: ${result?.error || 'Unknown error'}`);
+  const handleClearAll = () => {
+    const promptMsg = yearFilter === 'All' 
+      ? 'Are you sure you want to delete ALL application data? This action cannot be undone.'
+      : (
+          <span>
+            Are you sure you want to delete all application data for graduation year <strong className="text-slateBlue-800 text-[15px]">{yearFilter}</strong>? This action cannot be undone.
+          </span>
+        );
+      
+    setDeleteConfirmParams({
+      title: 'Clear Application Data',
+      message: promptMsg,
+      onConfirm: async () => {
+        const result = await clearAllApplications(yearFilter);
+        if (result?.success) {
+          showToast('success', yearFilter === 'All' ? 'All application data has been cleared.' : `Application data for ${yearFilter} has been cleared.`);
+          await refreshData();
+        } else {
+          showToast('error', `Clear data failed: ${result?.error || 'Unknown error'}`);
+        }
       }
-    }
+    });
   };
 
   const {
@@ -160,11 +183,24 @@ const UAppGrid = () => {
     handleConflictImportAll,
     handleConflictMergeAll
   } = useUAppImport({
-    data, sharedStudents, uappData, findUniversityByName, addCustomMapping, upsertStudents, upsertApplications, addApplications, refreshData, showToast
+    data, sharedStudents, uappData, findUniversityByName, addCustomMapping, upsertStudents, updateStudent, upsertApplications, addApplications, refreshData, showToast
   });
 
+  const {
+    isDeduplicateModalOpen,
+    setIsDeduplicateModalOpen,
+    duplicateGroups,
+    findDuplicates,
+    handleResolveGroup,
+    mergeAllExact,
+    isProcessing: isDeduplicating
+  } = useUAppDeduplicate(uappData, sharedStudents, deleteApplication, showToast);
+
   const handleSaveEntry = async (entryOrEntries, deletedIds = []) => {
-    if (!canEditApplications) return false;
+    if (!canEditApplications) {
+      showToast('error', 'You do not have permission to edit applications. (If you are an ADMIN, please refresh the page as the status may have been reset by hot-reload).');
+      return false;
+    }
     const entries = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries];
     
     try {
@@ -258,6 +294,7 @@ const UAppGrid = () => {
         gradYears={gradYears} filterFinalOnly={filterFinalOnly}
         setFilterFinalOnly={setFilterFinalOnly}
         onImportClick={() => importInputRef.current?.click()}
+        onDeduplicateClick={findDuplicates}
         onExportClick={() => setExportModal({ isOpen: true, type: 'FULL' })}
         onAddClick={() => { setEditingEntry(null); setSelectedStudentForEntry(null); setIsEntryModalOpen(true); }}
         onClearClick={handleClearAll}
@@ -265,6 +302,15 @@ const UAppGrid = () => {
         resultsCount={filteredData.length}
       />
       <input ref={importInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportXL} className="hidden" />
+
+      <DeduplicateModal
+        isOpen={isDeduplicateModalOpen}
+        onClose={() => setIsDeduplicateModalOpen(false)}
+        groups={duplicateGroups}
+        onResolve={handleResolveGroup}
+        onMergeAll={mergeAllExact}
+        isProcessing={isDeduplicating}
+      />
 
       {importMsg && (
         <div className={`fixed top-6 right-6 z-[1000] flex items-center gap-4 px-6 py-4 rounded-2xl text-sm font-bold shadow-2xl border ${
@@ -292,18 +338,18 @@ const UAppGrid = () => {
           ref={containerRef}
           className="overflow-auto max-h-[70vh]"
         >
-          <table className="w-full text-left text-xs text-slateBlue-800 border-collapse">
+          <table className="w-full table-fixed text-left text-xs text-slateBlue-800 border-collapse">
             <thead>
               <tr className="bg-slateBlue-800 text-white uppercase font-black text-[10px] tracking-widest sticky top-0 z-30 shadow-sm">
-                <th className="px-3 py-2.5 w-10 text-center">#</th>
-                <th className="px-3 py-2.5 w-20 text-center">Year</th>
-                <th className="px-3 py-2.5 w-28">Student ID</th>
-                <th className="px-3 py-2.5 w-48">Name</th>
-                <th className="px-2 py-2.5 w-12 text-center">QS</th>
-                <th className="px-3 py-2.5 w-64">Final Uni</th>
-                <th className="px-3 py-2.5 w-64">Final Program</th>
-                <th className="px-3 py-2.5 w-20 text-center">Stats</th>
-                <th className="px-3 py-2.5 w-16 text-center">Act</th>
+                <th className="px-2 py-1.5 w-10 text-center">#</th>
+                <th className="px-2 py-1.5 w-16 text-center">Year</th>
+                <th className="px-2 py-1.5 w-24">Student ID</th>
+                <th className="px-2 py-1.5 w-48">Name</th>
+                <th className="px-2 py-1.5 w-12 text-center">QS</th>
+                <th className="px-2 py-1.5">University (Final)</th>
+                <th className="px-2 py-1.5">Program (Final)</th>
+                <th className="px-2 py-1.5 w-32">Qualification</th>
+                <th className="px-2 py-1.5 w-16 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -354,11 +400,29 @@ const UAppGrid = () => {
         <ApplicationEntryModal
           isOpen={true}
           onClose={() => { setIsAppModalOpen(false); setSelectedStudentForApps(null); }}
+          onPrev={(() => {
+            const idx = filteredData.findIndex(s => s.id === selectedStudentForApps.id);
+            if (idx <= 0) return null;
+            return () => {
+              const prev = filteredData[idx - 1];
+              setSelectedStudentForApps(prev);
+            };
+          })()}
+          onNext={(() => {
+            const idx = filteredData.findIndex(s => s.id === selectedStudentForApps.id);
+            if (idx === -1 || idx >= filteredData.length - 1) return null;
+            return () => {
+              const next = filteredData[idx + 1];
+              setSelectedStudentForApps(next);
+            };
+          })()}
           onSave={async (entries, deletedIds) => {
              const success = await handleSaveEntry(entries, deletedIds);
              if (success) {
-               setIsAppModalOpen(false); 
-               setSelectedStudentForApps(null);
+               // We don't close the modal automatically so user can keep navigating
+               // but we need to update the local student data reference
+               const updated = data.find(s => s.id === selectedStudentForApps.id);
+               if (updated) setSelectedStudentForApps(updated);
              }
              return success;
           }}
@@ -373,6 +437,14 @@ const UAppGrid = () => {
         unmappedNames={resolvingUnies}
         onResolveRow={handleResolveOneRow}
         onFinish={handleFinishResolve}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={!!deleteConfirmParams}
+        onClose={() => setDeleteConfirmParams(null)}
+        onConfirm={deleteConfirmParams?.onConfirm}
+        title={deleteConfirmParams?.title}
+        message={deleteConfirmParams?.message}
       />
     </div>
   );

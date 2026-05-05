@@ -30,7 +30,7 @@ const StudentsGrid = () => {
   const { user, role } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { students, upsertStudents, deleteStudent, setUappData } = useStudents();
+  const { students, uappData, upsertStudents, updateStudent, deleteStudent, updateApplication, setUappData } = useStudents();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
@@ -140,7 +140,13 @@ const StudentsGrid = () => {
       }
     };
 
-    const res = await upsertStudents([studentToSave]);
+    let res;
+    if (editingStudent?.id) {
+       res = await updateStudent(editingStudent.id, studentToSave);
+    } else {
+       res = await upsertStudents([studentToSave]);
+    }
+
     if (res.success) {
       setEditingStudent(null);
       return { success: true };

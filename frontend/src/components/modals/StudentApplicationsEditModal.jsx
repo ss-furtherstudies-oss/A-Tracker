@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { X, Plus, Edit2, Trash2, GraduationCap, Check } from 'lucide-react';
 import ApplicationEntryModal from './ApplicationEntryModal';
 import { useStudents } from '../../context/StudentContext';
+import { useAuth } from '../../context/AuthContext';
+import { ConfirmDeleteModal } from '../uapp/UAppModals';
 
 const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, onDeleteApp, onAddApp }) => {
+  const { role } = useAuth();
   const [editingApp, setEditingApp] = useState(null);
   const [isAddingApp, setIsAddingApp] = useState(false);
+  const [appToDelete, setAppToDelete] = useState(null);
 
   if (!isOpen || !student) return null;
 
@@ -46,12 +50,14 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
             <h3 className="text-sm font-black text-slateBlue-800 uppercase tracking-widest flex items-center gap-2">
               <GraduationCap size={18} className="text-aura-teal" /> University Applications ({student.applications?.length || 0})
             </h3>
-            <button 
-              onClick={() => setIsAddingApp(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-aura-teal text-white font-black text-[11px] rounded-2xl hover:bg-teal-500 transition-all shadow-lg shadow-aura-teal/20 active:scale-95 uppercase tracking-wider"
-            >
-              <Plus size={14} strokeWidth={3} /> Add New Entry
-            </button>
+            {role === 'ADMIN' && (
+              <button 
+                onClick={() => setIsAddingApp(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-aura-teal text-white font-black text-[11px] rounded-2xl hover:bg-teal-500 transition-all shadow-lg shadow-aura-teal/20 active:scale-95 uppercase tracking-wider"
+              >
+                <Plus size={14} strokeWidth={3} /> Add New Entry
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4">
@@ -75,24 +81,22 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
                          </div>
                       </div>
                       
-                      <div className="flex items-center gap-2">
-                         <button 
-                           onClick={() => setEditingApp(app)}
-                           className="p-3 text-gray-400 hover:text-aura-teal hover:bg-aura-teal/5 rounded-2xl transition-all"
-                         >
-                            <Edit2 size={20} />
-                         </button>
-                         <button 
-                           onClick={() => {
-                             if(window.confirm("Are you sure you want to delete this application entry?")) {
-                               onDeleteApp(student.id, app.id);
-                             }
-                           }}
-                           className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
-                         >
-                            <Trash2 size={20} />
-                         </button>
-                      </div>
+                      {role === 'ADMIN' && (
+                        <div className="flex items-center gap-2">
+                           <button 
+                             onClick={() => setEditingApp(app)}
+                             className="p-3 text-gray-400 hover:text-aura-teal hover:bg-aura-teal/5 rounded-2xl transition-all"
+                           >
+                              <Edit2 size={20} />
+                           </button>
+                           <button 
+                             onClick={() => setAppToDelete(app)}
+                             className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                           >
+                              <Trash2 size={20} />
+                           </button>
+                        </div>
+                      )}
                    </div>
                 </div>
               ))
@@ -102,12 +106,14 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
                    <GraduationCap size={32} />
                 </div>
                 <p className="text-gray-400 font-bold">No application records found for this student.</p>
-                <button 
-                  onClick={() => setIsAddingApp(true)}
-                  className="mt-4 text-aura-teal font-black text-sm hover:underline uppercase tracking-widest"
-                >
-                   Add your first entry
-                </button>
+                {role === 'ADMIN' && (
+                  <button 
+                    onClick={() => setIsAddingApp(true)}
+                    className="mt-4 text-aura-teal font-black text-sm hover:underline uppercase tracking-widest"
+                  >
+                     Add your first entry
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -134,7 +140,7 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
             setEditingApp(null);
           }}
           initialStudent={student}
-          initialApplication={editingApp}
+          initialApplications={editingApp ? [editingApp] : null}
           onSave={async (entries) => {
             if (editingApp) {
                // When editing, it only returns an array of length 1
@@ -146,6 +152,22 @@ const StudentApplicationsEditModal = ({ isOpen, onClose, student, onUpdateApp, o
           }}
         />
       )}
+
+      <ConfirmDeleteModal
+        isOpen={!!appToDelete}
+        onClose={() => setAppToDelete(null)}
+        onConfirm={() => {
+          if (appToDelete) {
+            onDeleteApp(student.id, appToDelete.id);
+          }
+        }}
+        title="Delete Application"
+        message={
+          <span>
+            Are you sure you want to delete the application to <strong className="text-slateBlue-800 text-[15px]">{appToDelete?.university}</strong>? This action cannot be undone.
+          </span>
+        }
+      />
     </div>
   );
 };

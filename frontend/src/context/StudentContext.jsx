@@ -69,9 +69,14 @@ export const StudentProvider = ({ children }) => {
   const addApplications = async (newApps) => {
     try {
       const { data, error } = await withTimeout(db.insertApplications(newApps));
+      console.log(`[DB] insertApplications: sent=${newApps.length}, returned=${data?.length ?? 'null'}, error=${error?.message ?? 'none'}`);
       if (error) throw error;
+      if (!data || data.length === 0) {
+        console.error('[DB] INSERT RETURNED NO DATA — likely RLS policy blocking insert');
+        return { success: false, error: 'Insert returned no data. Check RLS policies.' };
+      }
 
-      setUappData(prev => [...prev, ...(data || [])]);
+      setUappData(prev => [...prev, ...data]);
       setLastModified(Date.now());
       return { success: true };
     } catch (err) {
@@ -82,11 +87,25 @@ export const StudentProvider = ({ children }) => {
 
   const upsertApplications = async (apps) => {
     try {
-      const { data, error } = await withTimeout(db.upsertApplications(apps));
-      if (error) throw error;
+      const toInsert = apps.filter(a => !a.id);
+      const toUpdate = apps.filter(a => !!a.id);
+      const allData = [];
+
+      if (toInsert.length > 0) {
+        const { data, error } = await withTimeout(db.insertApplications(toInsert));
+        if (error) throw error;
+        allData.push(...(data || []));
+      }
+      
+      if (toUpdate.length > 0) {
+        const { data, error } = await withTimeout(db.upsertApplications(toUpdate));
+        if (error) throw error;
+        allData.push(...(data || []));
+      }
+
       setUappData(prev => {
         const next = [...prev];
-        (data || []).forEach(updatedApp => {
+        allData.forEach(updatedApp => {
           const idx = next.findIndex(a => a.id === updatedApp.id);
           if (idx >= 0) next[idx] = updatedApp;
           else next.push(updatedApp);
@@ -94,7 +113,7 @@ export const StudentProvider = ({ children }) => {
         return next;
       });
       setLastModified(Date.now());
-      return { success: true, data };
+      return { success: true, data: allData };
     } catch (err) {
       console.error("Failed to upsert applications:", err.message);
       return { success: false, error: err.message };
@@ -122,7 +141,7 @@ export const StudentProvider = ({ children }) => {
     }));
   }, [students, uappData]);
 
-  // Upsert multiple students to Supabase
+  // Upsert multiple students to Supabase (used for bulk import where student_num is conflict key)
   const upsertStudents = async (studentDataArray) => {
     try {
       const { data: result, error } = await withTimeout(db.upsertStudents(studentDataArray));
@@ -133,6 +152,22 @@ export const StudentProvider = ({ children }) => {
       return { success: true, data: result };
     } catch (err) {
       console.error("Failed to upsert students:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Update a single student by ID
+  const updateStudent = async (id, updates) => {
+    try {
+      // Remove id from updates if it exists to prevent updating primary key
+      const { id: _id, ...cleanUpdates } = updates;
+      const { error } = await withTimeout(db.updateStudentById(id, cleanUpdates));
+      if (error) throw error;
+
+      await fetchData();
+      return { success: true };
+    } catch (err) {
+      console.error("Failed to update student:", err.message);
       return { success: false, error: err.message };
     }
   };
@@ -167,12 +202,41 @@ export const StudentProvider = ({ children }) => {
     }
   };
 
-  const clearAllApplications = async () => {
+  const clearAllApplications = async (year = 'All') => {
     try {
-      const { error } = await withTimeout(db.clearAllApplications());
-      if (error) throw error;
-      setUappData([]);
-      setLastModified(Date.now());
+      if (year === 'All') {
+        const { error } = await withTimeout(db.clearAllApplications());
+        if (error) throw error;
+
+        // Reset destination fields for ALL students
+        const allStudentIds = students.map(s => s.id);
+        if (allStudentIds.length > 0) {
+          const resetData = { university_dest: null, program_dest: null, quali: null };
+          // We do this in chunks to avoid overwhelming the connection
+          const CHUNK = 50;
+          for (let i = 0; i < allStudentIds.length; i += CHUNK) {
+            const chunk = allStudentIds.slice(i, i + CHUNK);
+            await Promise.all(chunk.map(id => db.updateStudentById(id, resetData)));
+          }
+        }
+        
+        setUappData([]);
+      } else {
+        const studentsInYear = students.filter(s => s.grad_year === Number(year) || s.grad_year === String(year));
+        const studentIds = studentsInYear.map(s => s.id);
+        if (studentIds.length > 0) {
+          // 1. Delete the application records
+          const { error } = await withTimeout(db.deleteApplicationsByStudentIds(studentIds));
+          if (error) throw error;
+
+          // 2. Clear the destination fields on the students themselves (the "fallback" data)
+          const resetData = { university_dest: null, program_dest: null, quali: null };
+          await Promise.all(studentIds.map(id => db.updateStudentById(id, resetData)));
+          
+          setUappData(prev => prev.filter(app => !studentIds.includes(app.student_id)));
+        }
+      }
+      await fetchData();
       return { success: true };
     } catch (err) {
       console.error("Failed to clear applications:", err.message);
@@ -192,6 +256,7 @@ export const StudentProvider = ({ children }) => {
     <StudentContext.Provider value={{
       students: studentsWithDestinations,
       upsertStudents,
+      updateStudent,
       deleteStudent,
       uappData,
       setUappData: setUappDataDirect,

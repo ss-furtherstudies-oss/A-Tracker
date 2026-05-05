@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as db from '../lib/supabaseService';
 
 const AuthContext = createContext();
 const AUTH_BOOT_TIMEOUT_MS = 60000;
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const resolveUserRole = async (currentUser) => {
   if (!currentUser) return 'VIEWER';
@@ -15,7 +16,6 @@ const resolveUserRole = async (currentUser) => {
     ]);
     
     if (error) return 'VIEWER';
-
     return profile?.role || 'VIEWER';
   } catch {
     return 'VIEWER';
@@ -38,7 +38,43 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState('VIEWER');
   const [loading, setLoading] = useState(true);
+  
+  const userRef = useRef(null);
+  const roleRef = useRef('VIEWER');
+  const idleTimerRef = useRef(null);
+  const roleResolvedForRef = useRef(null); // tracks which user ID we've already resolved
 
+  const updateAuth = useCallback((newUser, newRole) => {
+    userRef.current = newUser;
+    roleRef.current = newRole;
+    setUser(newUser);
+    setRole(newRole);
+  }, []);
+
+  // ─── Idle Timeout ─────────────────────────────────────────────────────────
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (userRef.current) {
+      idleTimerRef.current = setTimeout(async () => {
+        console.log('[AUTH] Idle timeout reached. Signing out.');
+        roleResolvedForRef.current = null;
+        updateAuth(null, 'VIEWER');
+        try { await supabase.auth.signOut(); } catch {}
+      }, IDLE_TIMEOUT_MS);
+    }
+  }, [updateAuth]);
+
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    const handler = () => { if (userRef.current) resetIdleTimer(); };
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handler));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
+
+  // ─── Auth Bootstrap ───────────────────────────────────────────────────────
   useEffect(() => {
     let active = true;
 
@@ -50,29 +86,31 @@ export const AuthProvider = ({ children }) => {
     };
 
     const timeoutId = window.setTimeout(() => {
-      console.warn('Auth bootstrap timed out. Falling back to viewer mode.');
+      console.warn('[AUTH] Bootstrap timed out.');
       if (!active) return;
-      setUser(null);
-      setRole('VIEWER');
+      updateAuth(null, 'VIEWER');
       setLoading(false);
     }, AUTH_BOOT_TIMEOUT_MS);
 
-    // Check active sessions and sets the user
     const getSession = async () => {
       try {
-        console.log('[AUTH] Getting session...');
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
         
         const currentUser = session?.user ?? null;
-        console.log('[AUTH] Session user:', currentUser?.email || 'NONE');
-        
         if (!active) return;
-        setUser(currentUser);
-        setRole(await resolveUserRole(currentUser));
+
+        if (currentUser) {
+          const resolvedRole = await resolveUserRole(currentUser);
+          roleResolvedForRef.current = currentUser.id;
+          updateAuth(currentUser, resolvedRole);
+          resetIdleTimer();
+        } else {
+          updateAuth(null, 'VIEWER');
+        }
       } catch (err) {
-        console.error("[AUTH] Auth session error:", err);
-        if (active) setRole('VIEWER');
+        console.error('[AUTH] Session error:', err);
+        if (active) updateAuth(null, 'VIEWER');
       } finally {
         finishLoading();
       }
@@ -80,15 +118,38 @@ export const AuthProvider = ({ children }) => {
 
     getSession();
 
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const currentUser = session?.user ?? null;
-        if (!active) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active) return;
+      const currentUser = session?.user ?? null;
+
+      // Sign-out or no session → clear everything
+      if (event === 'SIGNED_OUT' || !currentUser) {
+        roleResolvedForRef.current = null;
+        updateAuth(null, 'VIEWER');
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        finishLoading();
+        return;
+      }
+
+      // Same user we already resolved → keep existing role, just refresh user object
+      if (roleResolvedForRef.current === currentUser.id) {
+        userRef.current = currentUser;
         setUser(currentUser);
-        setRole(await resolveUserRole(currentUser));
-      } catch {
-        if (active) setRole('VIEWER');
+        resetIdleTimer();
+        finishLoading();
+        return;
+      }
+
+      // Genuinely new user → resolve role
+      try {
+        const newRole = await resolveUserRole(currentUser);
+        if (active) {
+          roleResolvedForRef.current = currentUser.id;
+          updateAuth(currentUser, newRole);
+          resetIdleTimer();
+        }
+      } catch (err) {
+        console.error('[AUTH] Role resolution error:', err);
       } finally {
         finishLoading();
       }
@@ -99,14 +160,14 @@ export const AuthProvider = ({ children }) => {
       window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [updateAuth, resetIdleTimer]);
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
   const signUp = (email, password) => supabase.auth.signUp({ email, password });
   const signOut = async () => {
-    // Clear state immediately for instant UI feedback
-    setUser(null);
-    setRole('VIEWER');
+    roleResolvedForRef.current = null;
+    updateAuth(null, 'VIEWER');
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     try {
       await supabase.auth.signOut();
     } catch (err) {

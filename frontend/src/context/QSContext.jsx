@@ -15,31 +15,10 @@ const buildNameVariants = (name) => {
   const upper = String(name || '').toUpperCase().trim();
   if (!upper) return [];
   const noParen = upper.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const noComma = upper.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   const noLeadingThe = upper.replace(/^THE\s+/, '').trim();
   const noParenNoThe = noParen.replace(/^THE\s+/, '').trim();
-  return Array.from(new Set([upper, noParen, noLeadingThe, noParenNoThe].filter(Boolean)));
-};
-
-const levenshtein = (a, b) => {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const matrix = [];
-  for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
-  for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
+  return Array.from(new Set([upper, noParen, noComma, noLeadingThe, noParenNoThe].filter(Boolean)));
 };
 
 export const QSProvider = ({ children }) => {
@@ -172,31 +151,16 @@ export const QSProvider = ({ children }) => {
       return result;
     }
 
-    let found = exactMap.get(cleanName) ?? acronymMap.get(cleanName) ?? null;
+    let found = null;
+    for (const v of variants) {
+      found = exactMap.get(v) ?? acronymMap.get(v) ?? null;
+      if (found) break;
+    }
     
     if (!found) {
-      const normName = normalize(cleanName);
+      const bestVariant = variants.find(v => !v.includes('(')) || cleanName;
+      const normName = normalize(bestVariant);
       if (normName.length > 3) found = normalizedMap.get(normName) ?? null;
-    }
-
-    if (!found && cleanName.length > 3) {
-      const normName = normalize(cleanName);
-      let bestDist = 4; // Threshold
-      let bestMatch = null;
-      
-      for (const u of overallData) {
-        const uNorm = normalize(u.university);
-        // Only run Levenshtein if length difference is small
-        if (Math.abs(uNorm.length - normName.length) > 3) continue;
-        
-        const dist = levenshtein(uNorm, normName);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestMatch = u;
-          if (dist === 1) break; // Good enough
-        }
-      }
-      if (bestMatch) found = bestMatch;
     }
 
     lookupCache.current.set(cleanName, found);
@@ -220,12 +184,24 @@ export const QSProvider = ({ children }) => {
     }
   };
 
+  const deleteQSData = async (id) => {
+    try {
+      const { error } = await db.deleteQSRanking(id);
+      if (error) throw error;
+      await initQSData();
+      return { success: true };
+    } catch (err) {
+      console.error("Failed to delete QS data:", err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
   return (
     <QSContext.Provider value={{
-      overallData, setOverallData, updateQSData,
+      overallData, setOverallData, updateQSData, deleteQSData,
       subjectData, setSubjectData,
       customMappings, addCustomMapping, addBulkCustomMappings,
-      findRankByName, findUniversityByName,
+      findRankByName, findUniversityByName, // Export lookup functions
       loading, refreshData: initQSData
     }}>
       {children}

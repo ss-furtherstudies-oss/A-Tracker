@@ -10,6 +10,7 @@ export const useUAppImport = ({
   findUniversityByName,
   addCustomMapping,
   upsertStudents,
+  updateStudent,
   upsertApplications,
   addApplications,
   refreshData,
@@ -92,9 +93,16 @@ export const useUAppImport = ({
             applications: [] 
           });
         }
+        const rawUni = String(row['University'] || '').trim();
+        const matchedUni = findUniversityByName(rawUni);
+        const resolvedUniversity = matchedUni?.university || rawUni;
+        const resolvedCountry = matchedUni?.location 
+          ? normalizeCountry(matchedUni.location) 
+          : normalizeCountry(row['Country']);
+
         const app = { 
-          country: normalizeCountry(row['Country']), 
-          university: (() => { const raw = String(row['University'] || '').trim(); return findUniversityByName(raw)?.university || raw; })(), 
+          country: resolvedCountry, 
+          university: resolvedUniversity, 
           program: String(row['Program'] || '').trim(), 
           quali: String(row['Quali'] || '').trim(), 
           condition: String(row['Conditions'] || '').trim(), 
@@ -106,12 +114,24 @@ export const useUAppImport = ({
         if (app.university || app.program || app.country) studentMap.get(studentId).applications.push(app);
       });
       
+      console.log('[IMPORT] Parsed studentMap:', studentMap.size, 'students');
+      console.log('[IMPORT] sharedStudents in DB:', sharedStudents.length);
+      console.log('[IMPORT] uappData in DB:', uappData.length);
+
       const conflicts = [];
       const newStudents = [];
+      const studentsToUpdate = [];
+      const appsToAutoInsert = [];
+      let autoImportedStudentsCount = 0;
 
       for (const [sid, imported] of studentMap.entries()) {
         const existing = sharedStudents.find((s) => s.student_num === sid);
         if (!existing) { newStudents.push(imported); continue; }
+        
+        // Auto-update grad_year if it exists in CSV and differs from DB
+        if (imported.grad_year && String(existing.grad_year) !== String(imported.grad_year)) {
+           studentsToUpdate.push({ id: existing.id, grad_year: imported.grad_year });
+        }
         
         const existingApps = uappData.filter((a) => a.student_id === existing.id);
         const seenImportKeys = new Set();
@@ -151,22 +171,54 @@ export const useUAppImport = ({
           }
         });
         
-        if (newApps.length > 0 || updateApps.length > 0) {
+        console.log(`[IMPORT] Analyzing ${sid}: new=${newApps.length}, update=${updateApps.length}, duplicates=${duplicateApps.length}`);
+
+        // Auto-import path: NO update conflicts
+        if (newApps.length > 0 && updateApps.length === 0) {
+          appsToAutoInsert.push(...newApps.map(a => ({ ...a, student_id: existing.id })));
+          autoImportedStudentsCount++;
+          continue;
+        }
+
+        // Conflict path: show modal for updateApps
+        if (updateApps.length > 0) {
+          // Still auto-queue the purely new apps
+          if (newApps.length > 0) {
+            appsToAutoInsert.push(...newApps.map(a => ({ ...a, student_id: existing.id })));
+          }
           conflicts.push({ 
             existing, 
             imported, 
-            newApps: [...newApps, ...updateApps], 
+            newApps: updateApps, 
             duplicateApps, 
             existingApps,
-            duplicateUniversities: Array.from(new Set([
-              ...duplicateApps.map(a => String(a.university || '').trim()),
-              ...updateApps.map(a => String(a.university || '').trim())
-            ].filter(Boolean)))
+            duplicateUniversities: Array.from(new Set(
+              updateApps.map(a => String(a.university || '').trim()).filter(Boolean)
+            ))
           });
         }
       }
 
+      console.log(`[IMPORT] Collected ${appsToAutoInsert.length} apps for auto-insertion across ${autoImportedStudentsCount} students`);
+
+      // 1. Perform bulk insert for all auto-importable apps
+      if (appsToAutoInsert.length > 0) {
+        const CHUNK = 100;
+        for (let i = 0; i < appsToAutoInsert.length; i += CHUNK) {
+          const chunk = appsToAutoInsert.slice(i, i + CHUNK);
+          const result = await addApplications(chunk);
+          if (!result.success) {
+            showToast('error', `Failed to auto-insert apps: ${result.error}`);
+            break;
+          }
+        }
+      }
+
+
+      console.log(`[IMPORT] Summary: newStudents=${newStudents.length}, autoImportedStudents=${autoImportedStudentsCount}, conflicts=${conflicts.length}, gradYearUpdates=${studentsToUpdate.length}`);
+
       if (newStudents.length > 0) {
+        console.log('[IMPORT] Creating new students:', newStudents.map(s => s.student_num));
         const studentRows = newStudents.map(s => ({
           student_num: s.student_num,
           name_en: s.name_en,
@@ -177,6 +229,7 @@ export const useUAppImport = ({
         }));
 
         const { data: createdStudents, success } = await upsertStudents(studentRows);
+        console.log('[IMPORT] upsertStudents result: success=', success, 'count=', createdStudents?.length);
         if (success && createdStudents) {
           const allNewApps = [];
           newStudents.forEach(s => {
@@ -185,18 +238,40 @@ export const useUAppImport = ({
               allNewApps.push(...s.applications.map(a => ({ ...a, student_id: created.id })));
             }
           });
-          if (allNewApps.length > 0) await addApplications(allNewApps);
+          console.log('[IMPORT] Total new apps to insert:', allNewApps.length);
+          if (allNewApps.length > 0) {
+            const CHUNK = 50;
+            for (let i = 0; i < allNewApps.length; i += CHUNK) {
+              const chunk = allNewApps.slice(i, i + CHUNK);
+              const result = await addApplications(chunk);
+              if (!result.success) {
+                console.error(`[IMPORT] FAILED batch ${Math.floor(i/CHUNK)+1}:`, result.error);
+                showToast('error', `Failed to add apps (batch ${Math.floor(i/CHUNK)+1}): ${result.error}`);
+                break;
+              }
+              console.log(`[IMPORT] Inserted batch ${Math.floor(i/CHUNK)+1} (${chunk.length} apps)`);
+            }
+          }
+        } else {
+          console.error('[IMPORT] FAILED to create students');
+          showToast('error', 'Failed to create new students.');
         }
       }
 
+      // Automatically sync grad_year for existing students
+      if (studentsToUpdate.length > 0) {
+         await Promise.all(studentsToUpdate.map(stu => updateStudent(stu.id, { grad_year: stu.grad_year })));
+      }
+
       if (conflicts.length > 0) {
+        console.log('[IMPORT] Opening conflict modal for', conflicts.length, 'students');
         setPendingImport({ conflicts, newCount: newStudents.length, updatedCount: 0 });
         setConflictIndex(0);
         return;
       }
 
       await refreshData();
-      showToast('success', `Import sync complete. Added ${newStudents.length} students.`);
+      showToast('success', `Import complete. ${newStudents.length} new students, ${autoImportedStudentsCount} students updated.`);
     } catch (err) { showToast('error', `Import failed: ${err.message}`); }
   };
 

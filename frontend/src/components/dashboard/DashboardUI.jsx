@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Download, Copy, Check, ChevronDown } from 'lucide-react';
 
-export const Card = ({ children, className = '', title, icon: Icon, headerExtra, headerBg = '' }) => {
+export const Card = ({ children, className = '', title, icon: Icon, badge, headerExtra, headerBg = '' }) => {
   const [copied, setCopied] = useState(false);
   const cardRef = useRef(null);
 
@@ -58,6 +58,11 @@ export const Card = ({ children, className = '', title, icon: Icon, headerExtra,
           <div className="flex items-center gap-2">
             {Icon && <Icon size={18} className="text-slateBlue-600" />}
             <h3 className="text-[14px] font-black text-slateBlue-800 uppercase tracking-widest">{title}</h3>
+            {badge && (
+              <span className="text-[10px] font-black text-aura-teal bg-aura-teal/10 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                {badge}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
              {headerExtra}

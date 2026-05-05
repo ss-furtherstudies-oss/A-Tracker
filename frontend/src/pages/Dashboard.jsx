@@ -44,39 +44,20 @@ const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, n
 
 const Dashboard = () => {
   const { t } = useTranslation();
-  const { students: liveStudents, lastModified } = useStudents();
+  const { students } = useStudents();
   const [fieldModal, setFieldModal] = useState(null);
   const [selectedCohortYear, setSelectedCohortYear] = useState('auto');
 
-  // ── Snapshot cache ──────────────────────────────────────────────────────────
-  const [snapStudents, setSnapStudents] = useState(null);
-  const [snapTime, setSnapTime]         = useState(0);
-
-  const takeSnapshot = useCallback(() => {
-    setSnapStudents(liveStudents);
-    setSnapTime(Date.now());
-  }, [liveStudents]);
-
-  useEffect(() => {
-    if (liveStudents.length > 0 && snapTime === 0) {
-      takeSnapshot();
-    }
-  }, [liveStudents, snapTime, takeSnapshot]);
-
-  const isStale = lastModified > 0 && lastModified > snapTime;
-  const students = snapStudents ?? liveStudents;
-
-  const snapLabel = snapTime > 0
-    ? `Snapshot: ${new Date(snapTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    : 'Loading…';
-  // ──────────────────────────────────────────────────────────────────────────
-
   const metrics = useMemo(() => {
-    const graduated = students.filter(s => s.status === 'GRADUATED' || s.status === 'ALUMNI').length;
+    const graduated = students.filter(s => {
+      const st = String(s.status || '').toLowerCase();
+      return st === 'graduated' || st === 'alumni';
+    }).length;
     const total     = students.length;
     const years     = [...new Set(students.map(s => s.grad_year).filter(Boolean))].length;
     const g11       = students.filter(s => String(s.grad_year) === '2027').length;
     const g12       = students.filter(s => String(s.grad_year) === '2026').length;
+    
     const getEliteCount = (count) => students.filter(s => {
       const ial = s.academicData?.ial || [];
       return ial.filter(row => row.grade === 'A*').length >= count;
@@ -106,7 +87,7 @@ const Dashboard = () => {
     };
 
     const topLevels = ['A*', 'A', '9', '8', '7'];
-    const aLevels   = ['A', '8', '7']; // Mapping 7/8 to A for simplicity if numeric
+    const aLevels   = ['A', '8', '7']; 
 
     const igcseAll = getGradeStats(students, 'igcse', topLevels);
     const ialAll   = getGradeStats(students, 'ial', topLevels);
@@ -136,7 +117,8 @@ const Dashboard = () => {
 
   const graduatedStudents = useMemo(() => students.filter(s => {
     const dest = String(s.university_dest || '').trim().toLowerCase();
-    return s.status !== 'WITHDRAWN' && dest && dest !== '-' && dest !== 'tbc' && dest !== 'pending' && dest !== 'unknown';
+    const st = String(s.status || '').toLowerCase();
+    return (st === 'graduated' || st === 'alumni') && dest && dest !== '-' && dest !== 'tbc' && dest !== 'pending' && dest !== 'unknown';
   }), [students]);
 
   const fieldData = useMemo(() => {
@@ -168,7 +150,7 @@ const Dashboard = () => {
     return graduatedStudents.map(s => {
       const c = inferCountry(s.university_dest);
       return { 
-        name: s.name_en || s.person?.name_en || s.student_num || 'Unknown', 
+        name: `${s.name_en || s.person?.name_en || s.student_num}${s.other_name || s.person?.other_name ? ` (${s.other_name || s.person?.other_name})` : ''}`,
         country: c, 
         uni: s.university_dest || '-',
         program: s.program_dest || '-',
@@ -182,28 +164,11 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-black text-slateBlue-800 tracking-tight leading-none">Dashboard</h1>
-          <p className="text-[10px] text-gray-400 font-semibold mt-1">{snapLabel}</p>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Real-time Data Sync</p>
+          </div>
         </div>
-
-        <button
-          onClick={takeSnapshot}
-          className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black tracking-wide transition-all duration-300 ${
-            isStale
-              ? 'bg-aura-teal text-white shadow-lg shadow-aura-teal/40 animate-pulse hover:animate-none hover:shadow-xl hover:scale-105'
-              : 'bg-white text-gray-400 border border-gray-100 hover:border-aura-teal/40 hover:text-aura-teal hover:bg-aura-teal/5'
-          }`}
-          title={isStale ? 'Student data has changed — click to refresh charts' : 'Charts are up to date'}
-        >
-          <RefreshCw size={13} className={isStale ? 'animate-spin [animation-duration:2s]' : ''} />
-          {isStale ? (
-            <>
-              Refresh Charts
-              <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-red-400 rounded-full ring-2 ring-white" />
-            </>
-          ) : (
-            'Refresh'
-          )}
-        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
@@ -356,21 +321,45 @@ const Dashboard = () => {
       <div>
         <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 px-1">Academic Results — Grade Distribution by Year</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <AcademicStackChart title="IGCSE Results" examKey="igcse" students={students} />
-          <AcademicStackChart title="IAS Results" examKey="ias" students={students} />
-          <AcademicStackChart title="IAL / GCEAL Results" examKey="ial" students={students} />
-          <IELTSChart students={students} />
+          <AcademicStackChart 
+            title="IGCSE Results" 
+            examKey="igcse" 
+            students={students} 
+            badge={`${students.filter(s => s.academicData?.igcse?.length > 0).length} Entries up to ${latestYearWithData || 'N/A'}`}
+          />
+          <AcademicStackChart 
+            title="IAS Results" 
+            examKey="ias" 
+            students={students} 
+            badge={`${students.filter(s => s.academicData?.ias?.length > 0).length} Entries up to ${latestYearWithData || 'N/A'}`}
+          />
+          <AcademicStackChart 
+            title="IAL / GCEAL Results" 
+            examKey="ial" 
+            students={students} 
+            badge={`${students.filter(s => s.academicData?.ial?.length > 0).length} Entries up to ${latestYearWithData || 'N/A'}`}
+          />
+          <IELTSChart 
+            students={students} 
+            badge={`${students.filter(s => s.academicData?.ielts?.overall).length} Entries up to ${latestYearWithData || 'N/A'}`}
+          />
         </div>
       </div>
 
       <div>
         <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 px-1">Study Destination Analysis</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <CountryChart students={graduatedStudents} title="Students by Country — All Years" color="#14b8a6" />
+          <CountryChart 
+            students={graduatedStudents} 
+            title="Students by Country — All Years" 
+            color="#14b8a6" 
+            badge={`${graduatedStudents.length} Entries up to ${latestYearWithData || 'N/A'}`}
+          />
           <CountryChart
             students={activeCohortYear ? graduatedStudents.filter(s => s.grad_year === activeCohortYear) : []}
             title={`Students by Country — ${activeCohortYear === latestYearWithData ? 'Latest Cohort' : 'Cohort'} (${activeCohortYear ?? 'N/A'})`}
             color="#6366f1"
+            badge={`${activeCohortYear ? graduatedStudents.filter(s => s.grad_year === activeCohortYear).length : 0} Entries`}
             headerExtra={
               cohortYears.length > 1 && (
                 <div className="relative">
@@ -401,7 +390,12 @@ const Dashboard = () => {
 
       <div>
         <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 px-1">Field of Study Distribution</h2>
-        <Card title="Field Distribution" icon={BookOpen} className="p-5">
+        <Card 
+          title="Field Distribution" 
+          icon={BookOpen} 
+          badge={`${totalFieldStudents} Entries up to ${latestYearWithData || 'N/A'}`}
+          className="p-5"
+        >
           <div className="flex flex-col lg:flex-row items-center gap-6">
             <div className="w-full lg:w-80 h-64">
               <ResponsiveContainer width="100%" height="100%">

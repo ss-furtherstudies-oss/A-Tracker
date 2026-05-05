@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Search, Save, MapPin, GraduationCap, BookOpen, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { X, Search, Save, MapPin, GraduationCap, BookOpen, AlertTriangle, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQS } from '../../context/QSContext';
 import { useStudents } from '../../context/StudentContext';
-import { LOCATION_MAP, REVERSE_LOCATION_MAP } from '../../constants/uapp';
+import { LOCATION_MAP, REVERSE_LOCATION_MAP, normalizeCountry } from '../../constants/uapp';
 
 const QUALIFICATION_SUGGESTIONS = ['BSc', 'PhD', 'BBA', 'LLB', 'BA', 'BEng', 'MBChB', 'MSc', 'MA'];
 
@@ -40,7 +40,8 @@ const ApplicationEntryRow = ({
 
   const filteredUniversities = useMemo(() => {
     if (!entry.location) return [];
-    let filtered = overallData.filter(u => u.location === entry.location);
+    const normalizedEntryLoc = normalizeCountry(entry.location);
+    let filtered = overallData.filter(u => normalizeCountry(u.location) === normalizedEntryLoc);
     if (uniSearch) {
       const term = uniSearch.toLowerCase();
       filtered = filtered.filter(u => u.university.toLowerCase().includes(term));
@@ -207,7 +208,7 @@ const ApplicationEntryRow = ({
   );
 };
 
-const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null, initialApplications = null }) => {
+const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null, initialApplications = null, onPrev, onNext }) => {
   const { students } = useStudents();
   const { overallData, findUniversityByName } = useQS();
   
@@ -384,7 +385,7 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
         <div className="bg-[#F0FCFB] shrink-0 z-50">
           <div className="px-6 sm:px-10 py-4 sm:py-5 flex items-center justify-between border-b border-aura-teal/10">
             {selectedStudent ? (
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-4 sm:gap-6">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-aura-teal to-serene-indigo flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl shadow-aura-teal/20 shrink-0">
                    {(selectedStudent.name_en || selectedStudent.person?.name_en)?.charAt(0) || 'S'}
                 </div>
@@ -421,9 +422,35 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
                 <h2 className="text-lg font-bold text-slateBlue-800 leading-tight">Add U-App</h2>
               </div>
             )}
-            <button onClick={onClose} className="p-2 sm:p-3 hover:bg-gray-100 rounded-full text-gray-400 hover:text-slateBlue-800 hover:rotate-90 transition-all shrink-0">
-              <X size={24} />
-            </button>
+            
+            <div className="flex items-center gap-4">
+              {/* Navigation Arrows */}
+              {selectedStudent && (onPrev || onNext) && (
+                <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded-2xl border border-aura-teal/10 shadow-sm mr-4">
+                  <button 
+                    onClick={onPrev}
+                    disabled={!onPrev}
+                    className="w-12 h-12 flex items-center justify-center hover:bg-aura-teal/10 rounded-xl text-aura-teal transition-all disabled:opacity-10 disabled:pointer-events-none active:scale-90"
+                    title="Previous Student"
+                  >
+                    <ChevronLeft size={28} strokeWidth={3} />
+                  </button>
+                  <div className="w-[1px] h-6 bg-aura-teal/10"></div>
+                  <button 
+                    onClick={onNext}
+                    disabled={!onNext}
+                    className="w-12 h-12 flex items-center justify-center hover:bg-aura-teal/10 rounded-xl text-aura-teal transition-all disabled:opacity-10 disabled:pointer-events-none active:scale-90"
+                    title="Next Student"
+                  >
+                    <ChevronRight size={28} strokeWidth={3} />
+                  </button>
+                </div>
+              )}
+
+              <button onClick={onClose} className="p-2 sm:p-3 hover:bg-gray-100 rounded-full text-gray-400 hover:text-slateBlue-800 hover:rotate-90 transition-all shrink-0">
+                <X size={28} />
+              </button>
+            </div>
           </div>
 
           {!selectedStudent && (
@@ -489,7 +516,7 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
 
               {/* Table Container - Fixed Header + Scrollable Body */}
               <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm min-h-0">
-                <div className="overflow-x-auto custom-scrollbar overflow-y-hidden">
+                <div className="overflow-x-auto custom-scrollbar overflow-y-hidden shrink-0">
                   <div className="min-w-[850px]">
                     {/* Header Row - TRULY FROZEN - Tiffany Blue */}
                     <div className="grid grid-cols-[50px_1fr_1fr_90px_80px_1fr_120px_60px_32px] gap-1 px-5 pt-4 pb-5 bg-[#F0FCFB] border-b border-gray-100 shadow-sm z-30">
@@ -509,7 +536,7 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
                 {/* Scrollable Body Container */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                    <div className="overflow-x-auto custom-scrollbar">
-                     <div className="min-w-[850px] p-4 pb-8 space-y-1.5 px-5 relative">
+                     <div className="min-w-[850px] p-4 pb-48 space-y-1.5 px-5 relative">
                         {entries.map((entry, index) => (
                           <ApplicationEntryRow
                             key={entry.id || `temp-${index}`}
@@ -542,7 +569,7 @@ const ApplicationEntryModal = ({ isOpen, onClose, onSave, initialStudent = null,
 
         {/* Footer */}
         <div className="px-6 py-4 bg-[#F0FCFB] border-t border-aura-teal/10 flex items-center justify-between shrink-0">
-          <p className="text-[11px] text-gray-400 font-bold">Total entries: {entries.length}</p>
+          <p className="text-[11px] text-gray-400 font-bold">Total entries: {entries.filter(e => e.id || e.university || e.program || e.location).length}</p>
           <div className="flex items-center gap-3">
             <button 
               onClick={handleAddRow}

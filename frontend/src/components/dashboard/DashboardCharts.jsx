@@ -16,7 +16,7 @@ import {
 } from '../../utils/dashboardUtils';
 import { getChartSubjectOptions, doesSubjectMatchChartOption } from '../../constants/subjects';
 
-export const AcademicStackChart = React.memo(({ title, examKey, students }) => {
+export const AcademicStackChart = React.memo(({ title, examKey, students, badge }) => {
   const [selected, setSelected] = useState('Overall');
   const ialNumericSubjects = new Set(['9CN0', '9FA0', '9EN0']);
 
@@ -142,6 +142,7 @@ export const AcademicStackChart = React.memo(({ title, examKey, students }) => {
     <Card 
       title={title} 
       icon={TrendingUp} 
+      badge={badge}
       className="p-5"
       headerExtra={(
         <div className="relative">
@@ -185,7 +186,7 @@ export const AcademicStackChart = React.memo(({ title, examKey, students }) => {
 });
 AcademicStackChart.displayName = 'AcademicStackChart';
 
-export const IELTSChart = React.memo(({ students }) => {
+export const IELTSChart = React.memo(({ students, badge }) => {
   const [selected, setSelected] = useState('overall');
   const bands = ['overall', 'reading', 'writing', 'listening', 'speaking'];
   const bandKeys = ['<5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9'];
@@ -221,6 +222,7 @@ export const IELTSChart = React.memo(({ students }) => {
     <Card 
       title="IELTS Results" 
       icon={Award} 
+      badge={badge}
       className="p-5"
       headerExtra={(
         <div className="relative">
@@ -280,7 +282,7 @@ export const IELTSChart = React.memo(({ students }) => {
 });
 IELTSChart.displayName = 'IELTSChart';
 
-export const CountryChart = ({ students, title, color, headerExtra }) => {
+export const CountryChart = ({ students, title, color, headerExtra, badge }) => {
   const data = useMemo(() => {
     const map = {};
     students.forEach(s => {
@@ -294,7 +296,7 @@ export const CountryChart = ({ students, title, color, headerExtra }) => {
   }, [students]);
 
   return (
-    <Card title={title} className="p-5" icon={Globe} headerExtra={headerExtra}>
+    <Card title={title} className="p-5" icon={Globe} headerExtra={headerExtra} badge={badge}>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 45, left: 10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />

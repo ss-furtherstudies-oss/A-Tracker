@@ -456,6 +456,8 @@ const StudentEditModal = ({ student, onClose, onSave }) => {
                 const result = await onSave(formData);
                 if (result?.success === false) {
                    setSaveError(result.error);
+                } else {
+                   onClose();
                 }
               } catch(err) {
                  setSaveError(err.message);

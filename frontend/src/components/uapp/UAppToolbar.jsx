@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Download, Upload, Plus, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { Search, Download, Upload, Plus, Trash2, FileSpreadsheet, ChevronDown, X, AlertTriangle } from 'lucide-react';
 
 const UAppToolbar = ({
   searchTerm,
@@ -10,6 +10,7 @@ const UAppToolbar = ({
   filterFinalOnly,
   setFilterFinalOnly,
   onImportClick,
+  onDeduplicateClick,
   onExportClick,
   onAddClick,
   onClearClick,
@@ -99,6 +100,14 @@ const UAppToolbar = ({
 
         {canEdit && (
           <>
+            <button
+              onClick={onDeduplicateClick}
+              className="flex items-center justify-center gap-2 px-4 h-[40px] bg-white border border-gray-100 text-slateBlue-600 rounded-2xl shadow-sm hover:border-aura-teal/30 hover:text-aura-teal transition-all text-xs font-black tracking-tight"
+              title="Manual Duplicate Check"
+            >
+              <AlertTriangle size={14} className="text-amber-500" />
+              <span className="hidden lg:inline">Deduplicate</span>
+            </button>
             <button
               onClick={onImportClick}
               className="flex items-center justify-center gap-2 px-4 h-[40px] bg-white border border-gray-100 text-slateBlue-600 rounded-2xl shadow-sm hover:border-aura-teal/30 hover:text-aura-teal transition-all text-xs font-black tracking-tight"

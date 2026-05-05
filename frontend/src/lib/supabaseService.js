@@ -10,8 +10,27 @@ import { supabase } from './supabaseClient';
 
 // ─── Students ───────────────────────────────────────────────────────────────
 
-export const fetchStudents = () =>
-  supabase.from('students').select('*').order('grad_year', { ascending: false });
+export const fetchStudents = async () => {
+  let allData = [];
+  let from = 0;
+  const step = 1000;
+  
+  while (true) {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .order('grad_year', { ascending: false })
+      .range(from, from + step - 1);
+    
+    if (error) return { data: null, error };
+    allData = [...allData, ...(data || [])];
+    
+    if (!data || data.length < step) break;
+    from += step;
+  }
+  
+  return { data: allData, error: null };
+};
 
 export const upsertStudents = (rows) =>
   supabase.from('students').upsert(rows, { onConflict: 'student_num' }).select();
@@ -30,8 +49,26 @@ export const clearAllStudents = () =>
 
 // ─── Applications ───────────────────────────────────────────────────────────
 
-export const fetchApplications = () =>
-  supabase.from('applications').select('*');
+export const fetchApplications = async () => {
+  let allData = [];
+  let from = 0;
+  const step = 1000;
+  
+  while (true) {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*')
+      .range(from, from + step - 1);
+    
+    if (error) return { data: null, error };
+    allData = [...allData, ...(data || [])];
+    
+    if (!data || data.length < step) break;
+    from += step;
+  }
+  
+  return { data: allData, error: null };
+};
 
 export const insertApplications = (rows) =>
   supabase.from('applications').insert(rows).select();
@@ -44,6 +81,17 @@ export const updateApplicationById = (id, updates) =>
 
 export const deleteApplicationById = (id) =>
   supabase.from('applications').delete().eq('id', id);
+
+export const deleteApplicationsByStudentIds = async (studentIds) => {
+  // Chunking to avoid URL length limits in PostgREST
+  const chunkSize = 200;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    const { error } = await supabase.from('applications').delete().in('student_id', chunk);
+    if (error) throw error;
+  }
+  return { success: true };
+};
 
 export const clearAllApplications = () =>
   supabase.from('applications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -80,6 +128,9 @@ export const upsertQSRankings = (rows) => {
   const hasId = rows.length > 0 && rows[0].id;
   return supabase.from('qs_rankings').upsert(rows, { onConflict: hasId ? 'id' : 'university' });
 };
+
+export const deleteQSRanking = (id) =>
+  supabase.from('qs_rankings').delete().eq('id', id);
 
 // ─── University Mappings ────────────────────────────────────────────────────
 

@@ -78,7 +78,7 @@ function AppContent() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 transition-all duration-300 md:ml-0 md:pl-20">
         <Header />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slateBlue-100 p-4 md:p-8 pb-24 md:pb-8">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slateBlue-100 p-2 md:p-6 pb-24 md:pb-6">
           <Suspense fallback={<PageSkeleton />}>
             <Routes>
               <Route path="/"                   element={<Navigate to="/dashboard" replace />} />

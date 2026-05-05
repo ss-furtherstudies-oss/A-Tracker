@@ -5,19 +5,20 @@ import { StatusBadge, ExpandedGradeCell } from '../ui/TableBadges';
 export const StudentRow = React.memo(({ s, idx, role, handleEdit, handleDelete, findRankByName }) => {
   return (
     <tr className={`hover:bg-slate-100 transition-colors group divide-x divide-gray-100/60 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-      <td className="px-1 py-1.5 text-center text-gray-500 font-bold w-[50px] text-[11px]">
-        {s.grad_year || ''}
+      <td className="px-1 py-1.5 text-center w-[90px]">
+        <div className="flex flex-col items-center">
+          <span className="text-[11px] font-bold text-gray-500">{s.grad_year || ''}</span>
+          <span className="text-[6px] font-black uppercase tracking-tight">
+             <StatusBadge status={s.status} />
+          </span>
+        </div>
       </td>
 
-      <td className="px-1 py-3.5 w-[50px] text-center">
-        <StatusBadge status={s.status} />
-      </td>
-
-      <td className="px-1 py-1.5 w-[80px] text-center font-bold text-[11px] text-gray-500">
+      <td className="px-1 py-1.5 w-[80px] text-center font-bold text-[10px] text-gray-500">
         {s.student_num || ''}
       </td>
 
-      <td className="px-3 py-1.5 font-bold text-slateBlue-800 w-[280px]">
+      <td className="px-3 py-1.5 font-bold text-slateBlue-800 w-[250px]">
         <div className="flex flex-col">
           <span className="truncate text-xs tracking-tight">
             {s.name_en || s.person?.name_en} {(s.other_name || s.person?.other_name) && `(${s.other_name || s.person?.other_name})`}
@@ -26,13 +27,13 @@ export const StudentRow = React.memo(({ s, idx, role, handleEdit, handleDelete, 
         </div>
       </td>
 
-      <td className="px-1 py-1.5 align-middle text-center w-[90px]">
+      <td className="px-1 py-1.5 align-middle text-center w-[70px]">
         <ExpandedGradeCell scoreStr={s.computed_igcse} />
       </td>
-      <td className="px-1 py-3.5 align-middle text-center w-[90px]">
+      <td className="px-1 py-3.5 align-middle text-center w-[70px]">
         <ExpandedGradeCell scoreStr={s.computed_ias} />
       </td>
-      <td className="px-1 py-3.5 align-middle text-center w-[90px]">
+      <td className="px-1 py-3.5 align-middle text-center w-[70px]">
         <ExpandedGradeCell scoreStr={s.computed_ial} />
       </td>
       <td className="px-1 py-1.5 text-center font-black text-aura-teal text-[11px] align-middle w-[50px]">
@@ -45,7 +46,7 @@ export const StudentRow = React.memo(({ s, idx, role, handleEdit, handleDelete, 
         </span>
       </td>
 
-      <td className="px-2 py-1.5 w-[350px] min-w-[350px] max-w-[350px]">
+      <td className="px-2 py-1.5 w-[250px] min-w-[250px] max-w-[250px]">
         <div className="flex flex-col">
           <span className="font-bold text-slateBlue-800 text-[11px] leading-tight break-words">{s.university_dest === '-' ? '' : s.university_dest}</span>
         </div>
@@ -57,12 +58,12 @@ export const StudentRow = React.memo(({ s, idx, role, handleEdit, handleDelete, 
         </span>
       </td>
 
-      <td className="px-2 py-1.5 w-[350px] min-w-[350px] max-w-[350px]">
+      <td className="px-2 py-1.5 w-[250px] min-w-[250px] max-w-[250px]">
         <span className="text-[11px] text-gray-500 font-medium break-words block">{s.program_dest === '-' ? '' : s.program_dest}</span>
       </td>
 
       {role === 'ADMIN' && (
-        <td className={`px-2 py-1.5 w-[100px] text-center sticky right-0 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+        <td className={`px-2 py-1.5 w-[70px] text-center sticky right-0 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
           <div className="flex items-center justify-center gap-1">
             <button
               onClick={() => handleEdit(s.id)}

@@ -7,7 +7,7 @@ import {
 } from 'react-simple-maps';
 import { X } from 'lucide-react';
 
-const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-50m.json";
+const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 const topoJsonCountryMap = {
   'United States of America': 'United States',
@@ -80,24 +80,24 @@ export const WorldMap = ({ students }) => {
               const isHovered = hoveredCountry === countryName && hasStudents;
               const isSelected = selectedCountry === countryName;
 
-              let fill = "#e2e8f0";
-              let stroke = "#cbd5e1";
+              let fill = "#cbd5e1"; // Darker gray for visibility
+              let stroke = "#94a3b8";
               let strokeWidth = 0.5;
               let filter = "none";
 
               if (hasStudents) {
-                fill = "#6366f1"; // Indigo
+                fill = "#4f46e5"; // Indigo-600
                 stroke = "#ffffff";
                 strokeWidth = 0.5;
               }
 
               if (isSelected) {
-                 fill = "#14b8a6"; // Teal
+                 fill = "#0d9488"; // Teal-600
                  strokeWidth = 1;
               } else if (isHovered) {
-                 fill = "#8b5cf6";
+                 fill = "#7c3aed"; // Violet-600
                  strokeWidth = 2; 
-                 filter = "drop-shadow(0px 4px 6px rgba(139, 92, 246, 0.4))";
+                 filter = "drop-shadow(0px 4px 6px rgba(124, 58, 237, 0.4))";
               }
 
               return (
