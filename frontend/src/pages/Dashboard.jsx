@@ -232,7 +232,7 @@ const Dashboard = () => {
         </Card>
 
         {/* All Years A*-A Stats */}
-        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-slate-700 to-slate-800 border-none shadow-lg shadow-slate-800/20 group">
+        <Card className="relative overflow-hidden p-3 bg-gradient-to-br from-yellow-400 to-yellow-500 border-none shadow-lg shadow-yellow-500/20 group">
           <div className="absolute -top-2 -right-2 opacity-10 group-hover:scale-110 transition-transform duration-500">
             <BookOpen size={70} className="text-white" />
           </div>
